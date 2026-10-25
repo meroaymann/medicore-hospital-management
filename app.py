@@ -137,6 +137,47 @@ def dashboard():
     }
     return render_template("dashboard.html", counts=counts)
 
+# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
+def coming_soon(title, icon, phase):
+    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
+
+
+@app.route("/patients")
+@login_required
+def patients_list():
+    return coming_soon("Patients", "👥", 4)
+
+
+@app.route("/doctors")
+@login_required
+def doctors_list():
+    return coming_soon("Doctors", "🩺", 5)
+
+
+@app.route("/appointments")
+@login_required
+def appointments_list():
+    return coming_soon("Appointments", "📅", 6)
+
+
+@app.route("/billing")
+@login_required
+def bills_list():
+    return coming_soon("Billing", "💰", 7)
+
+
+@app.route("/prescriptions")
+@login_required
+def prescriptions_list():
+    return coming_soon("Prescriptions", "💊", 8)
+
+
+@app.route("/search")
+@login_required
+def search():
+    q = request.args.get("q", "").strip()
+    title = f'Search: "{q}"' if q else "Search"
+    return coming_soon(title, "🔍", 11)
 
 if __name__ == "__main__":
     app.run(debug=True)

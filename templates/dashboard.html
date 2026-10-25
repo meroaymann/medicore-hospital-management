@@ -1,44 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard · {{ app_name }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script>
-    try {
-      const t = localStorage.getItem("theme");
-      const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-    } catch (e) {}
-  </script>
-</head>
-<body>
-  <main class="temp-dash">
-    <div class="card">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}
-          <div class="flash flash-{{ category }}" role="alert">
-            <span>{{ message }}</span>
-            <button type="button" class="flash-close" aria-label="Dismiss">&times;</button>
-          </div>
-        {% endfor %}
-      {% endwith %}
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
 
-      <h1>Hello, {{ current_user.name }} 👋</h1>
-      <p class="muted">Role: <strong>{{ current_user.role }}</strong></p>
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Good to see you, {{ current_user.name.split()[0] }} 👋</h2>
+    <p class="muted">Here's a quick overview for {{ today.strftime('%A, %d %B %Y') }}.</p>
+  </div>
+</div>
 
-      <ul class="temp-list">
-        {% for label, value in counts.items() %}
-          <li><span>{{ label }}</span><strong>{{ value }}</strong></li>
-        {% endfor %}
-      </ul>
-
-      <a href="{{ url_for('logout') }}" class="btn btn-outline btn-block">Log out</a>
-      <p class="muted temp-note">Temporary page. The real dashboard comes in Phase 10.</p>
+{% set icons = {"Patients": "👥", "Doctors": "🩺", "Appointments": "📅", "Bills": "🧾", "Prescriptions": "💊"} %}
+<div class="stats-grid">
+  {% for label, value in counts.items() %}
+    <div class="stat-card">
+      <div class="stat-icon">{{ icons[label] }}</div>
+      <div>
+        <div class="stat-label">{{ label }}</div>
+        <div class="stat-value">{{ value }}</div>
+      </div>
     </div>
-  </main>
-  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
-</html>
+  {% endfor %}
+</div>
+
+<p class="muted note">📊 The full dashboard with KPIs and charts comes in Phase 10.</p>
+{% endblock %}

@@ -37,3 +37,28 @@ document.querySelectorAll(".toggle-password").forEach((btn) => {
     btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
   });
 });
+
+// ================= MOBILE SIDEBAR =================
+const sidebar = document.getElementById("sidebar");
+const overlay = document.getElementById("overlay");
+const menuBtn = document.getElementById("menuBtn");
+const sidebarClose = document.getElementById("sidebarClose");
+
+function openSidebar() {
+  if (!sidebar) return;
+  sidebar.classList.add("open");
+  overlay.classList.add("show");
+}
+
+function closeSidebar() {
+  if (!sidebar) return;
+  sidebar.classList.remove("open");
+  overlay.classList.remove("show");
+}
+
+if (menuBtn) menuBtn.addEventListener("click", openSidebar);
+if (sidebarClose) sidebarClose.addEventListener("click", closeSidebar);
+if (overlay) overlay.addEventListener("click", closeSidebar);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSidebar();
+});
