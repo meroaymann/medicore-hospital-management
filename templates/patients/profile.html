@@ -11,6 +11,7 @@
     <p class="muted">Patient #{{ patient.id }} · Registered {{ patient.created_at.strftime("%d %b %Y") }}</p>
   </div>
   <div class="header-actions">
+        <a href="{{ url_for('appointment_new', patient_id=patient.id) }}" class="btn btn-primary">📅 Book appointment</a>
     <a href="{{ url_for('patient_edit', patient_id=patient.id) }}" class="btn btn-outline">✏️ Edit</a>
     <form method="post" action="{{ url_for('patient_delete', patient_id=patient.id) }}"
           onsubmit="return confirm('Delete {{ patient.name }}? This also deletes their appointments, bills and prescriptions.');">
@@ -55,7 +56,7 @@
             <tbody>
               {% for a in appointments %}
                 <tr>
-                  <td>{{ a.date.strftime("%d %b %Y") }}</td>
+                  <td><a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="link-strong">{{ a.date.strftime("%d %b %Y") }}</a></td>
                   <td>{{ a.time.strftime("%I:%M %p") }}</td>
                   <td>
                     <span class="person-name">{{ a.doctor.name }}</span>

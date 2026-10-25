@@ -39,6 +39,9 @@
     <p class="muted">{{ doctor.specialty }} · Joined {{ doctor.created_at.strftime("%b %Y") }}</p>
   </div>
   <div class="header-actions">
+        {% if doctor.status == "active" %}
+      <a href="{{ url_for('appointment_new', doctor_id=doctor.id) }}" class="btn btn-primary">📅 Book</a>
+    {% endif %}
     <a href="{{ url_for('doctor_edit', doctor_id=doctor.id) }}" class="btn btn-outline">✏️ Edit</a>
     <form method="post" action="{{ url_for('doctor_toggle', doctor_id=doctor.id) }}">
       <button type="submit" class="btn btn-outline">

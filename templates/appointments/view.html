@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Appointment #{{ a.id }}{% endblock %}
+{% block page_title %}Appointment details{% endblock %}
+
+{% macro status_button(status, label, css, confirm_text="") %}
+  <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}"
+        {% if confirm_text %}onsubmit="return confirm('{{ confirm_text }}');"{% endif %}>
+    <input type="hidden" name="status" value="{{ status }}">
+    <button type="submit" class="btn {{ css }}">{{ label }}</button>
+  </form>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('appointments_list') }}" class="back-link">← All appointments</a>
+    <h2>Appointment #{{ a.id }}</h2>
+    <p class="muted">Booked on {{ a.created_at.strftime("%d %b %Y") }}</p>
+  </div>
+  <div class="header-actions">
+    {% if a.status == "scheduled" %}
+      <a href="{{ url_for('appointment_edit', appointment_id=a.id) }}" class="btn btn-outline">🗓️ Reschedule</a>
+      {% if a.date <= today %}
+        {{ status_button("completed", "✓ Complete", "btn-primary") }}
+        {{ status_button("no_show", "No-show", "btn-outline") }}
+      {% endif %}
+      {{ status_button("cancelled", "✕ Cancel", "btn-danger", "Cancel this appointment?") }}
+    {% elif a.status == "cancelled" and a.date >= today %}
+      {{ status_button("scheduled", "↺ Restore appointment", "btn-outline") }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="appt-grid">
+  <!-- When -->
+  <section class="card appt-when">
+    <div class="date-block">
+      <span class="date-month">{{ a.date.strftime("%b") }}</span>
+      <span class="date-day">{{ a.date.day }}</span>
+      <span class="date-weekday">{{ a.date.strftime("%A") }}</span>
+    </div>
+    <div class="appt-when-info">
+      <div class="appt-time">🕒 {{ a.time.strftime("%I:%M %p") }}</div>
+      {{ status_badge(a.status) }}
+      {% if a.date == today %}<span class="chip-today">Today</span>{% endif %}
+      <dl class="info-list">
+        <div><dt>Reason</dt><dd>{{ a.reason or "–" }}</dd></div>
+        <div><dt>Notes</dt><dd>{{ a.notes or "–" }}</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- Patient -->
+  <section class="card">
+    <div class="section-head"><h3>👤 Patient</h3></div>
+    <a href="{{ url_for('patient_view', patient_id=a.patient.id) }}" class="person big">
+      <span class="avatar">{{ a.patient.name[0] | upper }}</span>
+      <span>
+        <span class="person-name">{{ a.patient.name }}</span>
+        <span class="person-sub">{{ a.patient.gender }} · {{ a.patient.age }} years · {{ a.patient.phone }}</span>
+      </span>
+    </a>
+  </section>
+
+  <!-- Doctor -->
+  <section class="card">
+    <div class="section-head"><h3>🩺 Doctor</h3></div>
+    <a href="{{ url_for('doctor_view', doctor_id=a.doctor.id) }}" class="person big">
+      <span class="doctor-icon">{{ specialty_icons.get(a.doctor.specialty, "🩺") }}</span>
+      <span>
+        <span class="person-name">{{ a.doctor.name }}</span>
+        <span class="person-sub">{{ a.doctor.specialty }} · {{ "{:,.0f}".format(a.doctor.consultation_fee) }} EGP</span>
+      </span>
+    </a>
+  </section>
+
+  <!-- Bill -->
+  <section class="card">
+    <div class="section-head"><h3>💰 Bill</h3>{% if a.bill %}{{ status_badge(a.bill.status) }}{% endif %}</div>
+    {% if a.bill %}
+      <div class="money-row">
+        <div><span>Amount</span><strong>{{ "{:,.0f}".format(a.bill.amount) }} EGP</strong></div>
+        <div><span>Paid</span><strong>{{ "{:,.0f}".format(a.bill.paid_amount) }} EGP</strong></div>
+        <div><span>Balance</span><strong class="{% if a.bill.balance > 0 %}text-danger{% endif %}">{{ "{:,.0f}".format(a.bill.balance) }} EGP</strong></div>
+      </div>
+    {% else %}
+      <p class="muted">No bill yet. Creating bills comes in Phase 7. 💳</p>
+    {% endif %}
+  </section>
+
+  <!-- Prescription -->
+  <section class="card">
+    <div class="section-head"><h3>💊 Prescription</h3></div>
+    {% if a.prescription %}
+      <p><strong>{{ a.prescription.diagnosis }}</strong></p>
+      <ul class="rx-meds">
+        {% for item in a.prescription.items %}
+          <li><strong>{{ item.medicine }}</strong> · {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No prescription yet. Adding prescriptions comes in Phase 8. 📝</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% set editing = appointment is not none %}
+{% block title %}{{ "Reschedule appointment" if editing else "Book appointment" }}{% endblock %}
+{% block page_title %}{{ "Reschedule appointment" if editing else "Book appointment" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('appointment_view', appointment_id=appointment.id) if editing else url_for('appointments_list') }}" class="back-link">← Back</a>
+    <h2>{{ "Reschedule appointment #" ~ appointment.id if editing else "Book an appointment" }}</h2>
+    <p class="muted">Choose a doctor and a date to see the available times. Closed on Fridays.</p>
+  </div>
+</div>
+
+<form method="post" class="card form-card">
+  <div class="form-grid">
+    <div class="field span-2">
+      <label for="patient_id">Patient *</label>
+      <select id="patient_id" name="patient_id" required>
+        <option value="">Choose a patient...</option>
+        {% for p in patients %}
+          <option value="{{ p.id }}" {% if form.get('patient_id') == p.id | string %}selected{% endif %}>
+            {{ p.name }} · {{ p.phone }}
+          </option>
+        {% endfor %}
+      </select>
+      <span class="field-hint">New patient? <a href="{{ url_for('patient_new') }}">Register them first</a>.</span>
+    </div>
+
+    <div class="field span-2">
+      <label for="doctor_id">Doctor *</label>
+      <select id="doctor_id" name="doctor_id" required>
+        <option value="">Choose a doctor...</option>
+        {% for d in doctors %}
+          <option value="{{ d.id }}" {% if form.get('doctor_id') == d.id | string %}selected{% endif %}>
+            {{ specialty_icons.get(d.specialty, "🩺") }} {{ d.name }} · {{ d.specialty }} · {{ "{:,.0f}".format(d.consultation_fee) }} EGP
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="date">Date *</label>
+      <input id="date" type="date" name="date" value="{{ form.get('date', '') }}" min="{{ today.isoformat() }}" required>
+    </div>
+
+    <div class="field">
+      <label for="time">Time *</label>
+      <select id="time" name="time" required
+              data-current="{{ form.get('time', '') }}"
+              data-exclude="{{ appointment.id if editing else '' }}">
+        <option value="">Choose a doctor and date first</option>
+      </select>
+      <span id="slotHint" class="field-hint"></span>
+    </div>
+
+    <div class="field span-2">
+      <label for="reason">Reason for visit</label>
+      <input id="reason" name="reason" value="{{ form.get('reason', '') }}" maxlength="200"
+             placeholder="e.g. Routine check-up, follow-up visit, chest pain...">
+    </div>
+
+    <div class="field span-2">
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="3" placeholder="Anything the doctor should know (optional)">{{ form.get('notes', '') }}</textarea>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{{ url_for('appointment_view', appointment_id=appointment.id) if editing else url_for('appointments_list') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{ "Save changes" if editing else "Book appointment" }}</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Load the free / booked time slots when the doctor or date changes
+  const SLOTS_URL = "{{ url_for('api_available_slots') }}";
+  const doctorSel = document.getElementById("doctor_id");
+  const dateInput = document.getElementById("date");
+  const timeSel = document.getElementById("time");
+  const slotHint = document.getElementById("slotHint");
+
+  async function loadSlots() {
+    const doctor = doctorSel.value;
+    const day = dateInput.value;
+    const wanted = timeSel.dataset.current || timeSel.value;
+
+    if (!doctor || !day) {
+      timeSel.innerHTML = '<option value="">Choose a doctor and date first</option>';
+      timeSel.disabled = true;
+      slotHint.textContent = "";
+      return;
+    }
+
+    timeSel.disabled = true;
+    slotHint.textContent = "Checking availability…";
+
+    try {
+      const params = new URLSearchParams({ doctor_id: doctor, date: day });
+      if (timeSel.dataset.exclude) params.set("exclude", timeSel.dataset.exclude);
+
+      const res = await fetch(`${SLOTS_URL}?${params}`);
+      const data = await res.json();
+
+      timeSel.innerHTML = '<option value="">Choose a time</option>';
+      data.slots.forEach((slot) => {
+        const option = document.createElement("option");
+        option.value = slot.value;
+        option.textContent = slot.available ? slot.label : `${slot.label} · unavailable`;
+        option.disabled = !slot.available;
+        if (slot.available && slot.value === wanted) option.selected = true;
+        timeSel.appendChild(option);
+      });
+
+      timeSel.disabled = !data.slots.some((s) => s.available);
+      slotHint.textContent = data.message;
+    } catch (e) {
+      slotHint.textContent = "Couldn't load the time slots. Please try again.";
+    }
+
+    timeSel.dataset.current = ""; // only pre-select the saved time on the first load
+  }
+
+  doctorSel.addEventListener("change", loadSlots);
+  dateInput.addEventListener("change", loadSlots);
+  loadSlots();
+</script>
+{% endblock %}

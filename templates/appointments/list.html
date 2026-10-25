@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination, status_badge with context %}
+{% block title %}Appointments{% endblock %}
+{% block page_title %}Appointments{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Appointments</h2>
+    <p class="muted">
+      {% if selected_day %}Showing {{ selected_day.strftime("%A, %d %B %Y") }} · {% endif %}
+      {{ pager.total }} appointment{{ "" if pager.total == 1 else "s" }}
+    </p>
+  </div>
+  <a href="{{ url_for('appointment_new') }}" class="btn btn-primary">+ Book appointment</a>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  {% for key, label in [("today", "Today"), ("upcoming", "Upcoming"), ("past", "Past"), ("all", "All")] %}
+    <a href="{{ url_for('appointments_list', view=key, q=q or None, doctor_id=doctor_id or None, status=status or None) }}"
+       class="tab {% if view == key and not selected_day %}active{% endif %}">
+      {{ label }} <span class="tab-count">{{ tab_counts[key] }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+<!-- Filters -->
+<form method="get" class="card toolbar">
+  <input type="hidden" name="view" value="{{ view }}">
+  <div class="field grow">
+    <label for="q">Patient</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Patient name">
+  </div>
+  <div class="field">
+    <label for="doctor_id">Doctor</label>
+    <select id="doctor_id" name="doctor_id">
+      <option value="">All doctors</option>
+      {% for d in doctors %}
+        <option value="{{ d.id }}" {% if doctor_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">All</option>
+      {% for s in statuses %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s.replace("_", "-") | capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="date">Specific date</label>
+    <input id="date" type="date" name="date" value="{{ selected_day.isoformat() if selected_day else '' }}">
+  </div>
+  <div class="toolbar-actions">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    {% if q or doctor_id or status or selected_day %}
+      <a href="{{ url_for('appointments_list', view=view) }}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Table -->
+<div class="card table-card">
+  {% if pager.items %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date & time</th>
+            <th>Patient</th>
+            <th>Doctor</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in pager.items %}
+            <tr>
+              <td>
+                <span class="person-name">
+                  {{ a.date.strftime("%a, %d %b") }}
+                  {% if a.date == today %}<span class="chip-today">Today</span>{% endif %}
+                </span>
+                <span class="person-sub">{{ a.time.strftime("%I:%M %p") }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('patient_view', patient_id=a.patient.id) }}" class="person">
+                  <span class="avatar sm">{{ a.patient.name[0] | upper }}</span>
+                  <span class="person-name">{{ a.patient.name }}</span>
+                </a>
+              </td>
+              <td>
+                <span class="person-name">{{ specialty_icons.get(a.doctor.specialty, "🩺") }} {{ a.doctor.name }}</span>
+                <span class="person-sub">{{ a.doctor.specialty }}</span>
+              </td>
+              <td class="truncate">{{ a.reason or "–" }}</td>
+              <td>{{ status_badge(a.status) }}</td>
+              <td class="text-right">
+                <div class="row-actions">
+                  <a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="btn btn-outline btn-sm">View</a>
+                  {% if a.status == "scheduled" %}
+                    {% if a.date <= today %}
+                      <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}">
+                        <input type="hidden" name="status" value="completed">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <button type="submit" class="btn btn-success-soft btn-sm" title="Mark completed">✓ Done</button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}"
+                          onsubmit="return confirm('Cancel this appointment?');">
+                      <input type="hidden" name="status" value="cancelled">
+                      <input type="hidden" name="next" value="{{ request.full_path }}">
+                      <button type="submit" class="btn btn-danger-soft btn-sm" title="Cancel">✕</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pagination(pager, "appointments_list") }}
+  {% else %}
+    <div class="empty-state">
+      <div class="big-icon">📭</div>
+      <h3>No appointments found</h3>
+      <p class="muted">Try another tab or filter, or book a new appointment.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

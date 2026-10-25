@@ -1,13 +1,16 @@
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time as dtime
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
 from sqlalchemy import or_, func
 
-from models import db, User, Patient, Doctor, Appointment, Bill, Prescription, BLOOD_TYPES, SPECIALTIES
+from models import (
+    db, User, Patient, Doctor, Appointment, Bill, Prescription,
+    BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES,
+)
 
 load_dotenv()
 
@@ -523,6 +526,310 @@ def doctor_delete(doctor_id):
     flash(f"{name} was deleted.", "info")
     return redirect(url_for("doctors_list"))
 
+# ================= APPOINTMENTS =================
+TIME_SLOTS = [dtime(h, m) for h in range(9, 17) for m in (0, 30)]  # 09:00 → 16:30
+CLOSED_WEEKDAY = 4  # Friday
+
+
+def booked_times(doctor_id, day, exclude_id=None):
+    """Times already taken for a doctor on a day (cancelled ones don't count)."""
+    query = db.session.query(Appointment.time).filter(
+        Appointment.doctor_id == doctor_id,
+        Appointment.date == day,
+        Appointment.status != "cancelled",
+    )
+    if exclude_id:
+        query = query.filter(Appointment.id != exclude_id)
+    return {t for (t,) in query.all()}
+
+
+def read_appointment_form(form, exclude_id=None):
+    """Read and check the booking form.
+    Returns (data, patient, doctor, day, slot, errors)."""
+    fields = ["patient_id", "doctor_id", "date", "time", "reason", "notes"]
+    data = {field: form.get(field, "").strip() for field in fields}
+    errors = []
+    patient = doctor = day = slot = None
+    today = date.today()
+
+    if data["patient_id"].isdigit():
+        patient = db.session.get(Patient, int(data["patient_id"]))
+    if not patient:
+        errors.append("Please choose a patient.")
+
+    if data["doctor_id"].isdigit():
+        doctor = db.session.get(Doctor, int(data["doctor_id"]))
+    if not doctor:
+        errors.append("Please choose a doctor.")
+    elif doctor.status != "active":
+        errors.append(f"{doctor.name} is off and not taking appointments.")
+
+    try:
+        day = datetime.strptime(data["date"], "%Y-%m-%d").date()
+        if day < today:
+            errors.append("You can't book an appointment in the past.")
+        elif day.weekday() == CLOSED_WEEKDAY:
+            errors.append("The clinic is closed on Fridays.")
+    except ValueError:
+        errors.append("Please choose a valid date.")
+
+    try:
+        slot = datetime.strptime(data["time"], "%H:%M").time()
+        if slot not in TIME_SLOTS:
+            errors.append("Please choose a valid time slot.")
+        elif day == today and slot <= datetime.now().time():
+            errors.append("That time has already passed today.")
+    except ValueError:
+        errors.append("Please choose a time.")
+
+    if len(data["reason"]) > 200:
+        errors.append("Reason is too long (max 200 characters).")
+
+    # Double-booking checks (only if everything else is valid)
+    if not errors:
+        if slot in booked_times(doctor.id, day, exclude_id):
+            errors.append(f"{doctor.name} is already booked at {slot.strftime('%I:%M %p')} on {day.strftime('%d %b')}.")
+
+        clash = Appointment.query.filter(
+            Appointment.patient_id == patient.id,
+            Appointment.date == day,
+            Appointment.time == slot,
+            Appointment.status != "cancelled",
+        )
+        if exclude_id:
+            clash = clash.filter(Appointment.id != exclude_id)
+        if clash.first():
+            errors.append(f"{patient.name} already has another appointment at that time.")
+
+    return data, patient, doctor, day, slot, errors
+
+
+def appointment_choices(current_doctor=None):
+    """Patients and doctors for the booking form."""
+    doctors = Doctor.query.filter_by(status="active").order_by(Doctor.name).all()
+    if current_doctor and current_doctor not in doctors:
+        doctors.append(current_doctor)  # keep the current doctor visible when editing
+    return {
+        "patients": Patient.query.order_by(Patient.name).all(),
+        "doctors": doctors,
+    }
+
+
+@app.route("/appointments")
+@login_required
+def appointments_list():
+    view = request.args.get("view", "upcoming")
+    q = request.args.get("q", "").strip()
+    doctor_id = request.args.get("doctor_id", type=int)
+    status = request.args.get("status", "")
+    day_str = request.args.get("date", "")
+    page = request.args.get("page", 1, type=int)
+    today = date.today()
+
+    query = Appointment.query.join(Patient)
+
+    selected_day = None
+    if day_str:
+        try:
+            selected_day = datetime.strptime(day_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    ascending = True
+    if selected_day:
+        query = query.filter(Appointment.date == selected_day)
+    elif view == "today":
+        query = query.filter(Appointment.date == today)
+    elif view == "past":
+        query = query.filter(Appointment.date < today)
+        ascending = False
+    elif view == "all":
+        ascending = False
+    else:
+        view = "upcoming"
+        query = query.filter(Appointment.date >= today)
+
+    if q:
+        query = query.filter(Patient.name.ilike(f"%{q}%"))
+    if doctor_id:
+        query = query.filter(Appointment.doctor_id == doctor_id)
+    if status in APPOINTMENT_STATUSES:
+        query = query.filter(Appointment.status == status)
+
+    if ascending:
+        query = query.order_by(Appointment.date.asc(), Appointment.time.asc())
+    else:
+        query = query.order_by(Appointment.date.desc(), Appointment.time.desc())
+
+    pager = query.paginate(page=page, per_page=12, error_out=False)
+
+    tab_counts = {
+        "today": Appointment.query.filter(Appointment.date == today).count(),
+        "upcoming": Appointment.query.filter(Appointment.date >= today).count(),
+        "past": Appointment.query.filter(Appointment.date < today).count(),
+        "all": Appointment.query.count(),
+    }
+
+    return render_template(
+        "appointments/list.html",
+        pager=pager,
+        view=view,
+        q=q,
+        doctor_id=doctor_id,
+        status=status,
+        selected_day=selected_day,
+        tab_counts=tab_counts,
+        doctors=Doctor.query.order_by(Doctor.name).all(),
+        statuses=APPOINTMENT_STATUSES,
+    )
+
+
+@app.route("/appointments/new", methods=["GET", "POST"])
+@login_required
+def appointment_new():
+    # Pre-fill patient/doctor when coming from a profile page
+    form = {
+        "patient_id": request.args.get("patient_id", ""),
+        "doctor_id": request.args.get("doctor_id", ""),
+    }
+
+    if request.method == "POST":
+        form, patient, doctor, day, slot, errors = read_appointment_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            appointment = Appointment(
+                patient_id=patient.id,
+                doctor_id=doctor.id,
+                date=day,
+                time=slot,
+                reason=form["reason"] or None,
+                notes=form["notes"] or None,
+                status="scheduled",
+            )
+            db.session.add(appointment)
+            db.session.commit()
+            flash(
+                f"Appointment booked for {patient.name} with {doctor.name} on "
+                f"{day.strftime('%d %b')} at {slot.strftime('%I:%M %p')}. ✅",
+                "success",
+            )
+            return redirect(url_for("appointment_view", appointment_id=appointment.id))
+
+    return render_template("appointments/form.html", form=form, appointment=None, **appointment_choices())
+
+
+@app.route("/appointments/<int:appointment_id>")
+@login_required
+def appointment_view(appointment_id):
+    appointment = db.get_or_404(Appointment, appointment_id)
+    return render_template("appointments/view.html", a=appointment)
+
+
+@app.route("/appointments/<int:appointment_id>/edit", methods=["GET", "POST"])
+@login_required
+def appointment_edit(appointment_id):
+    appointment = db.get_or_404(Appointment, appointment_id)
+
+    if appointment.status != "scheduled":
+        flash("Only scheduled appointments can be rescheduled.", "warning")
+        return redirect(url_for("appointment_view", appointment_id=appointment.id))
+
+    if request.method == "POST":
+        form, patient, doctor, day, slot, errors = read_appointment_form(request.form, exclude_id=appointment.id)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            appointment.patient_id = patient.id
+            appointment.doctor_id = doctor.id
+            appointment.date = day
+            appointment.time = slot
+            appointment.reason = form["reason"] or None
+            appointment.notes = form["notes"] or None
+            db.session.commit()
+            flash("Appointment updated. ✅", "success")
+            return redirect(url_for("appointment_view", appointment_id=appointment.id))
+    else:
+        form = {
+            "patient_id": str(appointment.patient_id),
+            "doctor_id": str(appointment.doctor_id),
+            "date": appointment.date.isoformat(),
+            "time": appointment.time.strftime("%H:%M"),
+            "reason": appointment.reason or "",
+            "notes": appointment.notes or "",
+        }
+
+    return render_template(
+        "appointments/form.html",
+        form=form,
+        appointment=appointment,
+        **appointment_choices(current_doctor=appointment.doctor),
+    )
+
+
+@app.route("/appointments/<int:appointment_id>/status", methods=["POST"])
+@login_required
+def appointment_status(appointment_id):
+    appointment = db.get_or_404(Appointment, appointment_id)
+    new_status = request.form.get("status", "")
+
+    messages = {
+        "completed": "Appointment marked as completed. ✅",
+        "cancelled": "Appointment cancelled.",
+        "no_show": "Appointment marked as no-show.",
+        "scheduled": "Appointment set back to scheduled.",
+    }
+
+    if new_status not in APPOINTMENT_STATUSES:
+        flash("Unknown status.", "error")
+    elif new_status in ("completed", "no_show") and appointment.date > date.today():
+        flash("You can't complete or mark a future appointment as no-show.", "warning")
+    else:
+        appointment.status = new_status
+        db.session.commit()
+        flash(messages[new_status], "success" if new_status == "completed" else "info")
+
+    next_url = request.form.get("next")
+    return redirect(next_url if is_safe_next(next_url) else url_for("appointment_view", appointment_id=appointment.id))
+
+
+@app.route("/api/available-slots")
+@login_required
+def api_available_slots():
+    """Used by the booking form to show free and booked times."""
+    doctor_id = request.args.get("doctor_id", type=int)
+    exclude_id = request.args.get("exclude", type=int)
+    today = date.today()
+
+    try:
+        day = datetime.strptime(request.args.get("date", ""), "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"slots": [], "message": "Choose a date."})
+
+    if not doctor_id:
+        return jsonify({"slots": [], "message": "Choose a doctor."})
+    if day < today:
+        return jsonify({"slots": [], "message": "That date is in the past."})
+    if day.weekday() == CLOSED_WEEKDAY:
+        return jsonify({"slots": [], "message": "The clinic is closed on Fridays."})
+
+    taken = booked_times(doctor_id, day, exclude_id)
+    now = datetime.now().time()
+
+    slots = [
+        {
+            "value": t.strftime("%H:%M"),
+            "label": t.strftime("%I:%M %p"),
+            "available": t not in taken and not (day == today and t <= now),
+        }
+        for t in TIME_SLOTS
+    ]
+    free = sum(1 for s in slots if s["available"])
+    message = f"{free} of {len(slots)} slots available." if free else "No free slots on this day. Try another date."
+    return jsonify({"slots": slots, "message": message})
+
 # ================= PLACEHOLDER PAGES (replaced in the next phases) =================
 def coming_soon(title, icon, phase):
     return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
@@ -532,10 +839,6 @@ def coming_soon(title, icon, phase):
 
 
 
-@app.route("/appointments")
-@login_required
-def appointments_list():
-    return coming_soon("Appointments", "📅", 6)
 
 
 @app.route("/billing")
