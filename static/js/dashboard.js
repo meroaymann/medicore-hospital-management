@@ -126,7 +126,19 @@
         responsive: true,
         maintainAspectRatio: false,
         cutout: "68%",
-        plugins: { legend: legend(c, "bottom"), tooltip },
+                plugins: {
+          legend: legend(c, "bottom"),
+          tooltip: {
+            ...tooltip,
+            callbacks: {
+              label: (ctx) => {
+                const total = ctx.dataset.data.reduce((sum, v) => sum + v, 0);
+                const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+              },
+            },
+          },
+        },
       },
     }));
 

@@ -5,13 +5,14 @@ from datetime import date, datetime, time as dtime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
+from markupsafe import Markup, escape
 from sqlalchemy import or_, func
 
 from models import (
     db, User, Patient, Doctor, Appointment, Bill, Prescription, PrescriptionItem,
     BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES, PAYMENT_METHODS,
 )
-from markupsafe import Markup, escape
+
 load_dotenv()
 
 APP_NAME = "MediCore"  # change the app name here only
@@ -20,6 +21,11 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-change-me")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///hospital.db"  # saved in the instance/ folder
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Cookie security: block cross-site form submissions, hide cookies from JavaScript
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 
 db.init_app(app)
 
@@ -56,8 +62,11 @@ def inject_globals():
 
 @app.template_filter("money")
 def money_filter(value):
-    """Format numbers as money: 1250 → '1,250 EGP'."""
-    return f"{value or 0:,.0f} EGP"
+    """Format numbers as money: 1250 → '1,250 EGP', 666.67 → '666.67 EGP'."""
+    text = f"{value or 0:,.2f}"
+    if text.endswith(".00"):
+        text = text[:-3]  # hide ".00" for whole amounts
+    return f"{text} EGP"
 
 @app.template_filter("highlight")
 def highlight_filter(text, query):
@@ -251,7 +260,7 @@ def dashboard():
         "collection_rate": percent(collected_total, billed_total),
         "no_show_rate": percent(past.get("no_show", 0), past_total),
         "completion_rate": percent(past.get("completed", 0), past_total),
-        "avg_revenue": collected_total / billed_patients if billed_patients else 0,
+        "avg_revenue": round(collected_total / billed_patients) if billed_patients else 0,
         "returning_rate": percent(returning, len(visits)),
     }
 
@@ -713,6 +722,15 @@ def doctor_toggle(doctor_id):
     label = "available again" if doctor.status == "active" else "set to off duty"
     flash(f"{doctor.name} is {label}.", "success")
 
+    if doctor.status == "off":
+        upcoming = Appointment.query.filter(
+            Appointment.doctor_id == doctor.id,
+            Appointment.date >= date.today(),
+            Appointment.status == "scheduled",
+        ).count()
+        if upcoming:
+            flash(f"{doctor.name} still has {upcoming} upcoming appointment(s). Please reschedule them.", "warning")
+
     next_url = request.form.get("next")
     return redirect(next_url if is_safe_next(next_url) else url_for("doctor_view", doctor_id=doctor.id))
 
@@ -981,22 +999,35 @@ def appointment_edit(appointment_id):
 def appointment_status(appointment_id):
     appointment = db.get_or_404(Appointment, appointment_id)
     new_status = request.form.get("status", "")
+    today = date.today()
 
+    # Which status changes are allowed
+    allowed = {
+        "scheduled": {"completed", "cancelled", "no_show"},
+        "cancelled": {"scheduled"},  # restore
+        "completed": set(),          # final
+        "no_show": set(),            # final
+    }
     messages = {
         "completed": "Appointment marked as completed. ✅",
         "cancelled": "Appointment cancelled.",
         "no_show": "Appointment marked as no-show.",
-        "scheduled": "Appointment set back to scheduled.",
+        "scheduled": "Appointment restored. ✅",
     }
 
-    if new_status not in APPOINTMENT_STATUSES:
-        flash("Unknown status.", "error")
-    elif new_status in ("completed", "no_show") and appointment.date > date.today():
+    if new_status not in allowed.get(appointment.status, set()):
+        flash("That status change isn't allowed.", "warning")
+    elif new_status in ("completed", "no_show") and appointment.date > today:
         flash("You can't complete or mark a future appointment as no-show.", "warning")
+    elif new_status == "scheduled" and appointment.date < today:
+        flash("Past appointments can't be restored. Book a new one instead.", "warning")
+    elif new_status == "scheduled" and appointment.time in booked_times(
+            appointment.doctor_id, appointment.date, exclude_id=appointment.id):
+        flash("That time slot was booked by someone else. Please reschedule instead.", "warning")
     else:
         appointment.status = new_status
         db.session.commit()
-        flash(messages[new_status], "success" if new_status == "completed" else "info")
+        flash(messages[new_status], "success" if new_status in ("completed", "scheduled") else "info")
 
     next_url = request.form.get("next")
     return redirect(next_url if is_safe_next(next_url) else url_for("appointment_view", appointment_id=appointment.id))
@@ -1178,7 +1209,7 @@ def bill_payment(bill_id):
     elif amount is None or amount <= 0:
         flash("Please enter a valid payment amount.", "error")
     elif amount > bill.balance + 0.01:
-        flash(f"The payment can't be more than the balance ({bill.balance:,.0f} EGP).", "error")
+        flash(f"The payment can't be more than the balance ({money_filter(bill.balance)}).", "error")
     elif method not in PAYMENT_METHODS:
         flash("Please choose a payment method.", "error")
     else:
@@ -1187,9 +1218,9 @@ def bill_payment(bill_id):
         bill.update_status()
         db.session.commit()
         if bill.status == "paid":
-            flash(f"Payment of {amount:,.0f} EGP recorded. The bill is fully paid. 🎉", "success")
+            flash(f"Payment of {money_filter(amount)} recorded. The bill is fully paid. 🎉", "success")
         else:
-            flash(f"Payment of {amount:,.0f} EGP recorded. Remaining: {bill.balance:,.0f} EGP.", "success")
+            flash(f"Payment of {money_filter(amount)} recorded. Remaining: {money_filter(bill.balance)}.", "success")
 
     return redirect(url_for("bill_view", bill_id=bill.id))
 

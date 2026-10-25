@@ -48,8 +48,8 @@
         {{ "⏸️ Set off" if doctor.status == "active" else "▶️ Set active" }}
       </button>
     </form>
-    <form method="post" action="{{ url_for('doctor_delete', doctor_id=doctor.id) }}"
-          onsubmit="return confirm('Delete {{ doctor.name }}?');">
+        <form method="post" action="{{ url_for('doctor_delete', doctor_id=doctor.id) }}"
+          data-confirm="Delete {{ doctor.name }}? This can't be undone.">
       <button type="submit" class="btn btn-danger">🗑️ Delete</button>
     </form>
   </div>

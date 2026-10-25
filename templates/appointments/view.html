@@ -5,7 +5,7 @@
 
 {% macro status_button(status, label, css, confirm_text="") %}
   <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}"
-        {% if confirm_text %}onsubmit="return confirm('{{ confirm_text }}');"{% endif %}>
+        {% if confirm_text %}data-confirm="{{ confirm_text }}"{% endif %}>
     <input type="hidden" name="status" value="{{ status }}">
     <button type="submit" class="btn {{ css }}">{{ label }}</button>
   </form>
@@ -23,7 +23,7 @@
       <a href="{{ url_for('appointment_edit', appointment_id=a.id) }}" class="btn btn-outline">🗓️ Reschedule</a>
       {% if a.date <= today %}
         {{ status_button("completed", "✓ Complete", "btn-primary") }}
-        {{ status_button("no_show", "No-show", "btn-outline") }}
+        {{ status_button("no_show", "No-show", "btn-outline", "Mark this appointment as a no-show?") }}
       {% endif %}
       {{ status_button("cancelled", "✕ Cancel", "btn-danger", "Cancel this appointment?") }}
     {% elif a.status == "cancelled" and a.date >= today %}
@@ -58,7 +58,7 @@
       <span class="avatar">{{ a.patient.name[0] | upper }}</span>
       <span>
         <span class="person-name">{{ a.patient.name }}</span>
-        <span class="person-sub">{{ a.patient.gender }} · {{ a.patient.age }} years · {{ a.patient.phone }}</span>
+        <span class="person-sub">{{ a.patient.gender }} · {{ a.patient.age }} year{{ "" if a.patient.age == 1 else "s" }} · {{ a.patient.phone }}</span>
       </span>
     </a>
   </section>
@@ -70,12 +70,12 @@
       <span class="doctor-icon">{{ specialty_icons.get(a.doctor.specialty, "🩺") }}</span>
       <span>
         <span class="person-name">{{ a.doctor.name }}</span>
-        <span class="person-sub">{{ a.doctor.specialty }} · {{ "{:,.0f}".format(a.doctor.consultation_fee) }} EGP</span>
+        <span class="person-sub">{{ a.doctor.specialty }} · {{ a.doctor.consultation_fee | money }}</span>
       </span>
     </a>
   </section>
 
-    <!-- Bill -->
+  <!-- Bill -->
   <section class="card">
     <div class="section-head"><h3>💰 Bill</h3>{% if a.bill %}{{ status_badge(a.bill.status) }}{% endif %}</div>
     {% if a.bill %}
@@ -93,14 +93,18 @@
     {% endif %}
   </section>
 
-    <!-- Prescription -->
+  <!-- Prescription -->
   <section class="card">
     <div class="section-head"><h3>💊 Prescription</h3></div>
     {% if a.prescription %}
       <p><strong>{{ a.prescription.diagnosis }}</strong></p>
       <ul class="rx-meds">
         {% for item in a.prescription.items %}
-          <li><strong>{{ item.medicine }}</strong> · {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }}</li>
+          {% set details = [] %}
+          {% if item.dosage %}{% set _ = details.append(item.dosage) %}{% endif %}
+          {% if item.frequency %}{% set _ = details.append(item.frequency) %}{% endif %}
+          {% if item.duration %}{% set _ = details.append(item.duration) %}{% endif %}
+          <li><strong>{{ item.medicine }}</strong>{% if details %} · {{ details | join(" · ") }}{% endif %}</li>
         {% endfor %}
       </ul>
       <a href="{{ url_for('prescription_view', prescription_id=a.prescription.id) }}" class="btn btn-outline btn-sm card-link">📄 View prescription</a>
@@ -111,3 +115,5 @@
       <p class="muted">A prescription can be written once the appointment is completed.</p>
     {% endif %}
   </section>
+</div>
+{% endblock %}

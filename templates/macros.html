@@ -15,7 +15,7 @@
         {% for p in pager.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
           {% if p %}
             {% if p == pager.page %}
-              <span class="page-link active">{{ p }}</span>
+              <span class="page-link active" aria-current="page">{{ p }}</span>
             {% else %}
               {% set _ = args.update({"page": p}) %}
               <a class="page-link" href="{{ url_for(endpoint, **args) }}">{{ p }}</a>

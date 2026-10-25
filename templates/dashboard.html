@@ -128,7 +128,7 @@
   <section class="card">
     <div class="section-head">
       <h3>🧾 Pending payments</h3>
-      <a href="{{ url_for('bills_list', status='unpaid') }}" class="link-strong">View all →</a>
+      <a href="{{ url_for('bills_list') }}" class="link-strong">View all →</a>
     </div>
     <div class="mini-list">
       {% for b in pending_bills %}
@@ -180,7 +180,7 @@
             <span class="avatar sm">{{ p.name[0] | upper }}</span>
             <span>
               <span class="person-name">{{ p.name }}</span>
-                <span class="person-sub">{{ p.gender }} · {{ p.age }} year{{ "" if p.age == 1 else "s" }}</span>
+              <span class="person-sub">{{ p.gender }} · {{ p.age }} year{{ "" if p.age == 1 else "s" }}</span>
             </span>
           </span>
           <span class="muted">{{ p.created_at.strftime("%d %b") }}</span>

@@ -24,7 +24,10 @@ document.querySelectorAll(".flash").forEach((flash) => {
   };
   const closeBtn = flash.querySelector(".flash-close");
   if (closeBtn) closeBtn.addEventListener("click", remove);
-  setTimeout(remove, 5000); // disappear after 5 seconds
+    // Success/info messages disappear after 5 seconds; errors and warnings stay until closed
+  if (flash.classList.contains("flash-success") || flash.classList.contains("flash-info")) {
+    setTimeout(remove, 5000);
+  }
 });
 
 // ================= SHOW / HIDE PASSWORD =================
@@ -72,5 +75,33 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       searchBox.focus();
     }
+  }
+});
+
+// ================= CONFIRM BEFORE SUBMITTING =================
+// Any <form data-confirm="..."> asks before it's sent
+document.querySelectorAll("form[data-confirm]").forEach((form) => {
+  form.addEventListener("submit", (e) => {
+    if (!confirm(form.dataset.confirm)) e.preventDefault();
+  });
+});
+
+// ================= PREVENT DOUBLE SUBMIT =================
+// After a POST form is sent, disable its button so a double-click can't send it twice
+document.querySelectorAll('form[method="post" i]').forEach((form) => {
+  form.addEventListener("submit", (e) => {
+    if (e.defaultPrevented) return; // e.g. the user clicked "Cancel" on a confirmation
+    form.querySelectorAll('button[type="submit"]').forEach((btn) => {
+      btn.disabled = true;
+    });
+  });
+});
+
+// If the user comes back with the browser's Back button, re-enable the buttons
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) {
+    document.querySelectorAll('button[type="submit"]:disabled').forEach((btn) => {
+      btn.disabled = false;
+    });
   }
 });

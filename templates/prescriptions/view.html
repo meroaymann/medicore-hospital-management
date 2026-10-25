@@ -14,7 +14,7 @@
     <a href="{{ url_for('prescription_edit', prescription_id=rx.id) }}" class="btn btn-outline">✏️ Edit</a>
     <form method="post" action="{{ url_for('prescription_delete', prescription_id=rx.id) }}"
           onsubmit="return confirm('Delete this prescription?');">
-      <button type="submit" class="btn btn-outline">🗑️ Delete</button>
+      <button type="submit" class="btn btn-danger-soft">🗑️ Delete</button>
     </form>
     <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
   </div>
@@ -62,10 +62,11 @@
       {% for item in rx.items %}
         <li>
           <strong>{{ item.medicine }}</strong>
-          <span>
-            {{ item.dosage or "" }}{% if item.dosage and item.frequency %} · {% endif %}{{ item.frequency or "" }}
-            {% if item.duration %} · for {{ item.duration }}{% endif %}
-          </span>
+          {% set details = [] %}
+          {% if item.dosage %}{% set _ = details.append(item.dosage) %}{% endif %}
+          {% if item.frequency %}{% set _ = details.append(item.frequency) %}{% endif %}
+          {% if item.duration %}{% set _ = details.append("for " ~ item.duration) %}{% endif %}
+          <span>{{ details | join(" · ") }}</span>
         </li>
       {% endfor %}
     </ol>

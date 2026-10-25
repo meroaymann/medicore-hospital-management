@@ -35,7 +35,7 @@
 
     <div class="field">
       <label for="consultation_fee">Consultation fee (EGP) *</label>
-      <input id="consultation_fee" type="number" name="consultation_fee" min="0" step="10"
+            <input id="consultation_fee" type="number" name="consultation_fee" min="0" max="100000" step="any"
              value="{{ form.get('consultation_fee', '') }}" placeholder="400" required>
     </div>
 

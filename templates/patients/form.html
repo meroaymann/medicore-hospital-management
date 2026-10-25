@@ -42,8 +42,8 @@
 
     <div class="field">
       <label for="email">Email</label>
-      <input id="email" type="email" name="email" value="{{ form.get('email', '') }}"
-             placeholder="patient@example.com">
+            <input id="email" type="email" name="email" value="{{ form.get('email', '') }}"
+             maxlength="120" placeholder="patient@example.com">
     </div>
 
     <div class="field">
@@ -58,8 +58,8 @@
 
     <div class="field span-2">
       <label for="address">Address</label>
-      <input id="address" name="address" value="{{ form.get('address', '') }}"
-             placeholder="Street, area, city">
+            <input id="address" name="address" value="{{ form.get('address', '') }}"
+             maxlength="200" placeholder="Street, area, city">
     </div>
   </div>
 

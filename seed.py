@@ -3,6 +3,7 @@ Run:  python seed.py
 ⚠️ This DELETES all existing data first.
 """
 import random
+import sys
 from datetime import date, datetime, time, timedelta
 
 from app import app
@@ -69,14 +70,18 @@ MEDICINES = [
 
 TIME_SLOTS = [time(h, m) for h in range(9, 17) for m in (0, 30)]  # 9:00 → 16:30
 
-
 def random_phone():
     return "01" + random.choice("0125") + "".join(random.choices("0123456789", k=8))
-
 
 def random_datetime(day):
     return datetime.combine(day, time(random.randint(8, 20), random.randint(0, 59)))
 
+# Ask before wiping the database (skip the question with:  python seed.py --yes)
+if "--yes" not in sys.argv:
+    answer = input("⚠️  This will DELETE all data and add sample data. Type YES to continue: ")
+    if answer.strip() != "YES":
+        print("Cancelled. Nothing was changed.")
+        sys.exit()
 
 with app.app_context():
     print("🗑️  Clearing old data...")
@@ -172,8 +177,7 @@ with app.app_context():
     db.session.add_all(appointments)
     db.session.commit()
 
-        # ---------- Bills + prescriptions for completed appointments ----------
-    bill_count, prescription_count = 0, 0
+    # ---------- Bills + prescriptions for completed appointments ----------
 
     for appt in appointments:
         if appt.status != "completed":
@@ -201,7 +205,6 @@ with app.app_context():
         )
         bill.update_status()
         db.session.add(bill)
-        bill_count += 1
 
         # Prescription (about 60% of visits)
         if random.random() < 0.6:
@@ -219,8 +222,7 @@ with app.app_context():
                     medicine=med[0], dosage=med[1], frequency=med[2], duration=med[3],
                 ))
             db.session.add(prescription)
-            prescription_count += 1
-
+            
     db.session.commit()
 
     print("✅ Done!")

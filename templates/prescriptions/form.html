@@ -7,19 +7,19 @@
   <div class="med-row">
     <div class="field">
       <label>Medicine *</label>
-      <input name="medicine" list="medicineList" value="{{ item.get('medicine', '') }}" maxlength="100" placeholder="e.g. Paracetamol 500mg">
+      <input name="medicine" list="medicineList" aria-label="Medicine" value="{{ item.get('medicine', '') }}" maxlength="100" placeholder="e.g. Paracetamol 500mg">
     </div>
     <div class="field">
       <label>Dosage</label>
-      <input name="dosage" value="{{ item.get('dosage', '') }}" maxlength="50" placeholder="1 tablet">
+      <input name="dosage" aria-label="Dosage" value="{{ item.get('dosage', '') }}" maxlength="50" placeholder="1 tablet">
     </div>
     <div class="field">
       <label>Frequency</label>
-      <input name="frequency" list="frequencyList" value="{{ item.get('frequency', '') }}" maxlength="50" placeholder="Twice daily">
+      <input name="frequency" list="frequencyList" aria-label="Frequency" value="{{ item.get('frequency', '') }}" maxlength="50" placeholder="Twice daily">
     </div>
     <div class="field">
       <label>Duration</label>
-      <input name="duration" value="{{ item.get('duration', '') }}" maxlength="50" placeholder="5 days">
+      <input name="duration" aria-label="Duration" value="{{ item.get('duration', '') }}" maxlength="50" placeholder="5 days">
     </div>
     <button type="button" class="icon-btn remove-row" title="Remove medicine" aria-label="Remove medicine">✕</button>
   </div>

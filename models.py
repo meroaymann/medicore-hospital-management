@@ -118,10 +118,11 @@ class Bill(db.Model):
 
     @property
     def balance(self):
-        return max(self.amount - self.paid_amount, 0)
+        """What's left to pay, rounded to 2 decimals (avoids tiny float errors)."""
+        return round(max(self.amount - self.paid_amount, 0), 2)
 
     def update_status(self):
-        if self.paid_amount >= self.amount:
+        if self.balance <= 0:
             self.status = "paid"
         elif self.paid_amount > 0:
             self.status = "partial"

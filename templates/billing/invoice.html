@@ -95,7 +95,7 @@
         <div class="section-head"><h3>💳 Record a payment</h3></div>
         <div class="field">
           <label for="amount">Amount (EGP)</label>
-          <input id="amount" type="number" name="amount" min="1" max="{{ b.balance }}" step="0.01" value="{{ '%g' | format(b.balance) }}" required>
+                    <input id="amount" type="number" name="amount" min="0.01" max="{{ '%.2f' | format(b.balance) }}" step="0.01" value="{{ '%.2f' | format(b.balance) }}" required>
           <span class="field-hint">Balance: {{ b.balance | money }}</span>
         </div>
         <div class="field">

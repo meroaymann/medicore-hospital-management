@@ -13,8 +13,8 @@
   <div class="header-actions">
         <a href="{{ url_for('appointment_new', patient_id=patient.id) }}" class="btn btn-primary">📅 Book appointment</a>
     <a href="{{ url_for('patient_edit', patient_id=patient.id) }}" class="btn btn-outline">✏️ Edit</a>
-    <form method="post" action="{{ url_for('patient_delete', patient_id=patient.id) }}"
-          onsubmit="return confirm('Delete {{ patient.name }}? This also deletes their appointments, bills and prescriptions.');">
+        <form method="post" action="{{ url_for('patient_delete', patient_id=patient.id) }}"
+          data-confirm="Delete {{ patient.name }}? This also deletes their appointments, bills and prescriptions.">
       <button type="submit" class="btn btn-danger">🗑️ Delete</button>
     </form>
   </div>
@@ -113,7 +113,11 @@
               </div>
               <ul class="rx-meds">
                 {% for item in rx.items %}
-                  <li><strong>{{ item.medicine }}</strong> · {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }}</li>
+                  {% set details = [] %}
+                  {% if item.dosage %}{% set _ = details.append(item.dosage) %}{% endif %}
+                  {% if item.frequency %}{% set _ = details.append(item.frequency) %}{% endif %}
+                  {% if item.duration %}{% set _ = details.append(item.duration) %}{% endif %}
+                  <li><strong>{{ item.medicine }}</strong>{% if details %} · {{ details | join(" · ") }}{% endif %}</li>
                 {% endfor %}
               </ul>
               {% if rx.notes %}<p class="muted rx-notes">📝 {{ rx.notes }}</p>{% endif %}

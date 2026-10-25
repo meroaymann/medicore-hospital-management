@@ -110,11 +110,11 @@
                         <button type="submit" class="btn btn-success-soft btn-sm" title="Mark completed">✓ Done</button>
                       </form>
                     {% endif %}
-                    <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}"
-                          onsubmit="return confirm('Cancel this appointment?');">
+                      <form method="post" action="{{ url_for('appointment_status', appointment_id=a.id) }}"
+                          data-confirm="Cancel {{ a.patient.name }}'s appointment on {{ a.date.strftime('%d %b') }}?">
                       <input type="hidden" name="status" value="cancelled">
                       <input type="hidden" name="next" value="{{ request.full_path }}">
-                      <button type="submit" class="btn btn-danger-soft btn-sm" title="Cancel">✕</button>
+                      <button type="submit" class="btn btn-danger-soft btn-sm" title="Cancel" aria-label="Cancel appointment">✕</button>
                     </form>
                   {% endif %}
                 </div>
