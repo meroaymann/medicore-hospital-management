@@ -132,9 +132,9 @@ with app.app_context():
     current_time = datetime.now().time()
     attempts = 0
 
-    while len(appointments) < 220 and attempts < 10000:
+    while len(appointments) < 500 and attempts < 20000:
         attempts += 1
-        day = TODAY + timedelta(days=random.randint(-60, 14))
+        day = TODAY + timedelta(days=random.randint(-150, 14))
         if day.weekday() == 4:  # Friday = day off
             continue
 

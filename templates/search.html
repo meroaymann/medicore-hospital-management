@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Search{% endblock %}
+{% block page_title %}Search{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    {% if q | length >= 2 %}
+      <h2>Results for “{{ q }}”</h2>
+      <p class="muted">{{ total }} result{{ "" if total == 1 else "s" }} found</p>
+    {% else %}
+      <h2>Search {{ app_name }}</h2>
+      <p class="muted">Find patients, doctors, appointments, prescriptions and bills in one place.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if q | length < 2 %}
+  <!-- Tips -->
+  <div class="card search-tips">
+    <div class="big-icon">🔍</div>
+    <h3>Type at least 2 characters in the search bar above</h3>
+    <div class="tips-grid">
+      <div><strong>👥 Patients</strong><span>Name, phone or email · e.g. “Ahmed”, “010”</span></div>
+      <div><strong>🩺 Doctors</strong><span>Name or specialty · e.g. “Cardiology”</span></div>
+      <div><strong>💊 Prescriptions</strong><span>Diagnosis or medicine · e.g. “Ibuprofen”</span></div>
+      <div><strong>#️⃣ By number</strong><span>Bill, appointment or Rx number · e.g. “#26”</span></div>
+    </div>
+  </div>
+
+{% elif not sections %}
+  <!-- Nothing found -->
+  <div class="card empty-state">
+    <div class="big-icon">🤷‍♀️</div>
+    <h3>No results for “{{ q }}”</h3>
+    <p class="muted">Check the spelling, or try a shorter word.</p>
+  </div>
+
+{% else %}
+  <!-- Jump links -->
+  <div class="tabs">
+    {% for s in sections %}
+      <a href="#{{ s.key }}" class="tab">{{ s.icon }} {{ s.title }} <span class="tab-count">{{ s.count }}</span></a>
+    {% endfor %}
+  </div>
+
+  <div class="search-results">
+    {% for s in sections %}
+      <section id="{{ s.key }}" class="card result-section">
+        <div class="section-head">
+          <h3>{{ s.icon }} {{ s.title }} <span class="muted">({{ s.count }})</span></h3>
+          {% if s.count > s["items"] | length %}
+            <a href="{{ s.see_all }}" class="link-strong">See all {{ s.count }} →</a>
+          {% endif %}
+        </div>
+
+        <div class="result-list">
+          {% for item in s["items"] %}
+
+            {% if s.key == "patients" %}
+              <a href="{{ url_for('patient_view', patient_id=item.id) }}" class="result-row">
+                <span class="person">
+                  <span class="avatar sm">{{ item.name[0] | upper }}</span>
+                  <span>
+                    <span class="person-name">{{ item.name | highlight(q) }}</span>
+                    <span class="person-sub">{{ item.phone | highlight(q) }} · {{ item.email | highlight(q) if item.email else "No email" }}</span>
+                  </span>
+                </span>
+                <span class="muted">{{ item.gender }} · {{ item.age }}y</span>
+              </a>
+
+            {% elif s.key == "doctors" %}
+              <a href="{{ url_for('doctor_view', doctor_id=item.id) }}" class="result-row">
+                <span class="person">
+                  <span class="doctor-icon sm">{{ specialty_icons.get(item.specialty, "🩺") }}</span>
+                  <span>
+                    <span class="person-name">{{ item.name | highlight(q) }}</span>
+                    <span class="person-sub">{{ item.specialty | highlight(q) }} · {{ item.consultation_fee | money }}</span>
+                  </span>
+                </span>
+                {{ status_badge(item.status) }}
+              </a>
+
+            {% elif s.key == "appointments" %}
+              <a href="{{ url_for('appointment_view', appointment_id=item.id) }}" class="result-row">
+                <span>
+                  <span class="person-name">{{ item.patient.name | highlight(q) }} → {{ item.doctor.name | highlight(q) }}</span>
+                  <span class="person-sub">#{{ item.id }} · {{ item.date.strftime("%d %b %Y") }} · {{ item.time.strftime("%I:%M %p") }} · {{ item.reason | highlight(q) if item.reason else "No reason" }}</span>
+                </span>
+                {{ status_badge(item.status) }}
+              </a>
+
+            {% elif s.key == "prescriptions" %}
+              <a href="{{ url_for('prescription_view', prescription_id=item.id) }}" class="result-row">
+                <span>
+                  <span class="person-name">{{ item.diagnosis | highlight(q) }}</span>
+                  <span class="person-sub">Rx #{{ item.id }} · {{ item.patient.name | highlight(q) }} · {{ item.doctor.name }} · {{ item.created_at.strftime("%d %b %Y") }}</span>
+                  <span class="med-chips">
+                    {% for med in item["items"] %}<span class="med-chip">{{ med.medicine | highlight(q) }}</span>{% endfor %}
+                  </span>
+                </span>
+              </a>
+
+            {% elif s.key == "bills" %}
+              <a href="{{ url_for('bill_view', bill_id=item.id) }}" class="result-row">
+                <span>
+                  <span class="person-name">Bill #{{ item.id }} · {{ item.patient.name | highlight(q) }}</span>
+                  <span class="person-sub">{{ item.created_at.strftime("%d %b %Y") }} · {{ item.amount | money }} · Balance {{ item.balance | money }}</span>
+                </span>
+                {{ status_badge(item.status) }}
+              </a>
+            {% endif %}
+
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

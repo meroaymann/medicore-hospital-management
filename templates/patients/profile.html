@@ -26,7 +26,7 @@
     <div class="profile-top">
       <div class="avatar lg">{{ patient.name[0] | upper }}</div>
       <h3>{{ patient.name }}</h3>
-      <p class="muted">{{ patient.gender }} · {{ patient.age }} years</p>
+      <p class="muted">{{ patient.gender }} · {{ patient.age }} year{{ "" if patient.age == 1 else "s" }}</p>
       {% if patient.blood_type %}<span class="badge badge-blood">🩸 {{ patient.blood_type }}</span>{% endif %}
     </div>
     <dl class="info-list">

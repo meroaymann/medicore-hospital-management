@@ -62,3 +62,15 @@ if (overlay) overlay.addEventListener("click", closeSidebar);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeSidebar();
 });
+
+// ================= SHORTCUT: press "/" to search =================
+document.addEventListener("keydown", (e) => {
+  const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
+  if (e.key === "/" && !typing) {
+    const searchBox = document.querySelector(".search-form input");
+    if (searchBox) {
+      e.preventDefault();
+      searchBox.focus();
+    }
+  }
+});

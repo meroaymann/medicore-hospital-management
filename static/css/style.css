@@ -1244,3 +1244,216 @@ a.page-link:hover { border-color: var(--primary); color: var(--primary); }
 @media print {
   .rx-sheet { max-width: none; padding: 0; border: none; box-shadow: none; }
 }
+
+/* ================= DASHBOARD ================= */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform 0.2s, border-color 0.2s;
+}
+.kpi-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-2));
+  opacity: 0.8;
+}
+.kpi-card.tone-success::before { background: var(--success); }
+.kpi-card.tone-danger::before { background: var(--danger); }
+
+.kpi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.kpi-icon {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  font-size: 1.25rem;
+}
+.kpi-value { font-size: clamp(1.3rem, 1.8vw, 1.75rem); font-weight: 800; white-space: nowrap; }
+.kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.kpi-sub { font-size: 0.78rem; color: var(--muted); }
+
+.trend {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.trend.up { background: rgba(22, 163, 74, 0.12); color: var(--success); }
+.trend.down { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+
+/* ---------- Insight row ---------- */
+.insight-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+.insight {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.insight span { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.insight strong { font-size: 1.05rem; white-space: nowrap; }
+
+/* ---------- Grid of charts and tables ---------- */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.dash-grid .span-2 { grid-column: span 2; }
+
+.chart-card { display: flex; flex-direction: column; }
+.chart-box { position: relative; flex: 1; min-height: 280px; }
+
+.dash-grid .table-card .section-head { padding: 18px 20px 0; }
+
+/* ---------- Mini lists ---------- */
+.mini-list { display: flex; flex-direction: column; gap: 6px; }
+.mini-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.mini-item:hover { background: var(--surface-2); }
+.mini-item strong { font-size: 0.88rem; white-space: nowrap; }
+
+.rank {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+/* ---------- Responsive ---------- */
+/* KPI + insight cards fit as many per row as the space allows */
+.kpi-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.insight-row { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+@media (max-width: 1280px) {
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-grid .span-2 { grid-column: span 2; }
+
+  /* Reorder so the two small charts sit side by side (no empty gaps) */
+  .dash-grid > :nth-child(1) { order: 1; } /* appointments trend */
+  .dash-grid > :nth-child(2) { order: 2; } /* status donut */
+  .dash-grid > :nth-child(4) { order: 3; } /* departments */
+  .dash-grid > :nth-child(3) { order: 4; } /* revenue */
+  .dash-grid > :nth-child(5) { order: 5; } /* today's schedule */
+  .dash-grid > :nth-child(6) { order: 6; } /* age chart */
+  .dash-grid > :nth-child(7) { order: 7; } /* pending payments */
+  .dash-grid > :nth-child(8) { order: 8; } /* top doctors */
+  .dash-grid > :nth-child(9) { order: 9; } /* new patients */
+}
+@media (max-width: 760px) {
+  .dash-grid { grid-template-columns: 1fr; }
+  .dash-grid .span-2 { grid-column: span 1; }
+  .chart-box { min-height: 240px; }
+}
+
+/* ================= GLOBAL SEARCH ================= */
+mark {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.35);
+  color: inherit;
+}
+
+.search-results { display: flex; flex-direction: column; gap: 18px; }
+.result-section { scroll-margin-top: 90px; }
+.result-section h3 .muted { font-size: 0.85rem; font-weight: 600; }
+
+.result-list { display: flex; flex-direction: column; gap: 4px; }
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.result-row:hover { background: var(--surface-2); }
+.result-row .med-chips { margin-top: 6px; }
+.doctor-icon.sm { width: 36px; height: 36px; border-radius: 10px; font-size: 1.1rem; }
+
+.search-tips { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 24px; text-align: center; }
+.search-tips .big-icon { font-size: 2.6rem; }
+.tips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 900px;
+  margin-top: 8px;
+}
+.tips-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  text-align: left;
+}
+.tips-grid span { font-size: 0.82rem; color: var(--muted); }
+
+/* ================= ERROR PAGES ================= */
+.error-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  text-align: center;
+  animation: slideIn 0.4s ease;
+}
+.error-icon { font-size: 3.4rem; }
+.error-code {
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.error-card h1 { font-size: 1.6rem; }
+.error-card .btn { margin-top: 10px; }

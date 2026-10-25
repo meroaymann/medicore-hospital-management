@@ -1,27 +1,199 @@
 {% extends "base.html" %}
+{% from "macros.html" import status_badge %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.js"></script>
+{% endblock %}
+
+{% macro kpi(icon, label, value, sub="", trend=None, tone="") %}
+  <div class="kpi-card {{ tone }}">
+    <div class="kpi-top">
+      <span class="kpi-icon">{{ icon }}</span>
+      {% if trend is not none %}
+        <span class="trend {{ 'up' if trend >= 0 else 'down' }}">{{ "▲" if trend >= 0 else "▼" }} {{ trend | abs }}%</span>
+      {% endif %}
+    </div>
+    <div class="kpi-value">{{ value }}</div>
+    <div class="kpi-label">{{ label }}</div>
+    {% if sub %}<div class="kpi-sub">{{ sub }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
 {% block content %}
+<!-- Header -->
 <div class="page-header">
   <div>
-    <h2>Good to see you, {{ current_user.name.split()[0] }} 👋</h2>
-    <p class="muted">Here's a quick overview for {{ today.strftime('%A, %d %B %Y') }}.</p>
+    <h2>{{ greeting }}, {{ current_user.name.split()[0] }} 👋</h2>
+    <p class="muted">Here's what's happening at {{ app_name }} today, {{ today.strftime("%A, %d %B %Y") }}.</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('patient_new') }}" class="btn btn-outline">+ Register patient</a>
+    <a href="{{ url_for('appointment_new') }}" class="btn btn-primary">📅 Book appointment</a>
   </div>
 </div>
 
-{% set icons = {"Patients": "👥", "Doctors": "🩺", "Appointments": "📅", "Bills": "🧾", "Prescriptions": "💊"} %}
-<div class="stats-grid">
-  {% for label, value in counts.items() %}
-    <div class="stat-card">
-      <div class="stat-icon">{{ icons[label] }}</div>
-      <div>
-        <div class="stat-label">{{ label }}</div>
-        <div class="stat-value">{{ value }}</div>
-      </div>
-    </div>
-  {% endfor %}
+<!-- KPI cards -->
+<div class="kpi-grid">
+  {{ kpi("👥", "Total patients", "{:,}".format(kpis.total_patients),
+         "+" ~ kpis.new_patients ~ " new this month", kpis.new_patients_change) }}
+  {{ kpi("📅", "Today's appointments", kpis.today_total,
+         kpis.today_done ~ " completed · " ~ kpis.today_left ~ " upcoming") }}
+  {{ kpi("⏳", "Upcoming appointments", kpis.upcoming, "Scheduled after today") }}
+  {{ kpi("🩺", "Active doctors", kpis.active_doctors, "of " ~ kpis.total_doctors ~ " doctors") }}
+  {{ kpi("💰", "Revenue this month", kpis.revenue_month | money, "Compared to last month", kpis.revenue_change, "tone-success") }}
+  {{ kpi("🧾", "Unpaid amount", kpis.unpaid_amount | money, kpis.unpaid_count ~ " open bills", None, "tone-danger") }}
+  {{ kpi("❌", "Cancellation rate", kpis.cancellation_rate ~ "%", "Of past appointments",
+         None, "tone-success" if kpis.cancellation_rate < 10 else "tone-danger") }}
+  <div class="kpi-card">
+    <div class="kpi-top"><span class="kpi-icon">📈</span></div>
+    <div class="kpi-value">{{ kpis.collection_rate }}%</div>
+    <div class="kpi-label">Collection rate</div>
+    <progress class="progress-bar" value="{{ kpis.collection_rate }}" max="100">{{ kpis.collection_rate }}%</progress>
+  </div>
 </div>
 
-<p class="muted note">📊 The full dashboard with KPIs and charts comes in Phase 10.</p>
+<!-- Insights -->
+<div class="insight-row">
+  <div class="insight"><span>🚫 No-show rate</span><strong>{{ kpis.no_show_rate }}%</strong></div>
+  <div class="insight"><span>✅ Completion rate</span><strong>{{ kpis.completion_rate }}%</strong></div>
+  <div class="insight"><span>💵 Avg revenue / patient</span><strong>{{ kpis.avg_revenue | money }}</strong></div>
+  <div class="insight"><span>🔁 Returning patients</span><strong>{{ kpis.returning_rate }}%</strong></div>
+</div>
+
+<!-- Charts + tables -->
+<div class="dash-grid">
+  <section class="card chart-card span-2">
+    <div class="section-head"><h3>📈 Appointments · last 30 days</h3></div>
+    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+  </section>
+
+  <section class="card chart-card">
+    <div class="section-head"><h3>🍩 Appointment status</h3></div>
+    <div class="chart-box"><canvas id="statusChart"></canvas></div>
+  </section>
+
+  <section class="card chart-card span-2">
+    <div class="section-head"><h3>💵 Revenue · last 6 months</h3></div>
+    <div class="chart-box"><canvas id="revenueChart"></canvas></div>
+  </section>
+
+  <section class="card chart-card">
+    <div class="section-head"><h3>🏥 Busiest departments</h3></div>
+    <div class="chart-box"><canvas id="specialtyChart"></canvas></div>
+  </section>
+
+  <!-- Today's schedule -->
+  <section class="card table-card span-2">
+    <div class="section-head">
+      <h3>🗓️ Today's schedule</h3>
+      <a href="{{ url_for('appointments_list', view='today') }}" class="link-strong">View all →</a>
+    </div>
+    {% if todays %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for a in todays %}
+              <tr>
+                <td><a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="link-strong">{{ a.time.strftime("%I:%M %p") }}</a></td>
+                <td>
+                  <a href="{{ url_for('patient_view', patient_id=a.patient.id) }}" class="person">
+                    <span class="avatar sm">{{ a.patient.name[0] | upper }}</span>
+                    <span class="person-name">{{ a.patient.name }}</span>
+                  </a>
+                </td>
+                <td>
+                  <span class="person-name">{{ a.doctor.name }}</span>
+                  <span class="person-sub">{{ a.doctor.specialty }}</span>
+                </td>
+                <td>{{ status_badge(a.status) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty-inline">No appointments today. 🌴</p>
+    {% endif %}
+  </section>
+
+  <section class="card chart-card">
+    <div class="section-head"><h3>👥 Patients by age</h3></div>
+    <div class="chart-box"><canvas id="ageChart"></canvas></div>
+  </section>
+
+  <!-- Pending payments -->
+  <section class="card">
+    <div class="section-head">
+      <h3>🧾 Pending payments</h3>
+      <a href="{{ url_for('bills_list', status='unpaid') }}" class="link-strong">View all →</a>
+    </div>
+    <div class="mini-list">
+      {% for b in pending_bills %}
+        <a href="{{ url_for('bill_view', bill_id=b.id) }}" class="mini-item">
+          <span>
+            <span class="person-name">{{ b.patient.name }}</span>
+            <span class="person-sub">Bill #{{ b.id }} · {{ b.created_at.strftime("%d %b") }}</span>
+          </span>
+          <strong class="text-danger">{{ b.balance | money }}</strong>
+        </a>
+      {% else %}
+        <p class="muted">No pending payments. 🎉</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Top doctors -->
+  <section class="card">
+    <div class="section-head">
+      <h3>🏆 Top doctors</h3>
+      <a href="{{ url_for('doctors_list') }}" class="link-strong">View all →</a>
+    </div>
+    <div class="mini-list">
+      {% for row in top_doctors %}
+        <a href="{{ url_for('doctor_view', doctor_id=row.doctor.id) }}" class="mini-item">
+          <span class="person">
+            <span class="rank">{{ loop.index }}</span>
+            <span>
+              <span class="person-name">{{ row.doctor.name }}</span>
+              <span class="person-sub">{{ row.visits }} visits · {{ row.doctor.specialty }}</span>
+            </span>
+          </span>
+          <strong>{{ row.revenue | money }}</strong>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Recent patients -->
+  <section class="card">
+    <div class="section-head">
+      <h3>🆕 New patients</h3>
+      <a href="{{ url_for('patients_list') }}" class="link-strong">View all →</a>
+    </div>
+    <div class="mini-list">
+      {% for p in recent_patients %}
+        <a href="{{ url_for('patient_view', patient_id=p.id) }}" class="mini-item">
+          <span class="person">
+            <span class="avatar sm">{{ p.name[0] | upper }}</span>
+            <span>
+              <span class="person-name">{{ p.name }}</span>
+                <span class="person-sub">{{ p.gender }} · {{ p.age }} year{{ "" if p.age == 1 else "s" }}</span>
+            </span>
+          </span>
+          <span class="muted">{{ p.created_at.strftime("%d %b") }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<!-- Chart data for dashboard.js -->
+<script id="dashboardData" type="application/json">{{ chart_data | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime, time as dtime, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -11,7 +11,7 @@ from models import (
     db, User, Patient, Doctor, Appointment, Bill, Prescription, PrescriptionItem,
     BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES, PAYMENT_METHODS,
 )
-
+from markupsafe import Markup, escape
 load_dotenv()
 
 APP_NAME = "MediCore"  # change the app name here only
@@ -58,6 +58,22 @@ def inject_globals():
 def money_filter(value):
     """Format numbers as money: 1250 → '1,250 EGP'."""
     return f"{value or 0:,.0f} EGP"
+
+@app.template_filter("highlight")
+def highlight_filter(text, query):
+    """Wrap the matching part of the text in <mark> (safely escaped)."""
+    text = "" if text is None else str(text)
+    if not query:
+        return escape(text)
+
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    parts, last = [], 0
+    for match in pattern.finditer(text):
+        parts.append(escape(text[last:match.start()]))
+        parts.append(Markup("<mark>") + escape(match.group()) + Markup("</mark>"))
+        last = match.end()
+    parts.append(escape(text[last:]))
+    return Markup("").join(parts)
 
 def is_safe_next(target):
     """Only allow redirects inside our own site."""
@@ -139,19 +155,203 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ================= PAGES =================
+# ================= DASHBOARD =================
+STATUS_LABELS = {"scheduled": "Scheduled", "completed": "Completed", "cancelled": "Cancelled", "no_show": "No-show"}
+AGE_GROUPS = [("0–17", 0, 17), ("18–35", 18, 35), ("36–60", 36, 60), ("60+", 61, 200)]
+
+
+def percent(part, whole):
+    return round(part / whole * 100, 1) if whole else 0
+
+
+def change(current, previous):
+    """Percentage change vs the previous period (None if there's nothing to compare)."""
+    if not previous:
+        return None
+    return round((current - previous) / previous * 100, 1)
+
+
+def last_n_months(n, today):
+    """[(year, month), ...] for the last n months, oldest first."""
+    months, year, month = [], today.year, today.month
+    for _ in range(n):
+        months.append((year, month))
+        month -= 1
+        if month == 0:
+            month, year = 12, year - 1
+    return list(reversed(months))
+
+
 @app.route("/")
 @login_required
 def dashboard():
-    """Temporary dashboard (the real one comes in Phase 10)."""
-    counts = {
-        "Patients": Patient.query.count(),
-        "Doctors": Doctor.query.count(),
-        "Appointments": Appointment.query.count(),
-        "Bills": Bill.query.count(),
-        "Prescriptions": Prescription.query.count(),
+    today = date.today()
+    now = datetime.now()
+    month_start = today.replace(day=1)
+    prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
+    month_start_dt = datetime.combine(month_start, dtime.min)
+    prev_month_start_dt = datetime.combine(prev_month_start, dtime.min)
+
+    # ---------- KPI cards ----------
+    total_patients = Patient.query.count()
+    new_patients = Patient.query.filter(Patient.created_at >= month_start_dt).count()
+    new_patients_prev = Patient.query.filter(
+        Patient.created_at >= prev_month_start_dt, Patient.created_at < month_start_dt
+    ).count()
+
+    todays = Appointment.query.filter(Appointment.date == today).order_by(Appointment.time).all()
+    today_done = sum(1 for a in todays if a.status == "completed")
+    today_left = sum(1 for a in todays if a.status == "scheduled")
+
+    upcoming = Appointment.query.filter(Appointment.date > today, Appointment.status == "scheduled").count()
+    active_doctors = Doctor.query.filter_by(status="active").count()
+    total_doctors = Doctor.query.count()
+
+    revenue_month = db.session.query(func.coalesce(func.sum(Bill.paid_amount), 0)).filter(
+        Bill.created_at >= month_start_dt).scalar()
+    revenue_prev = db.session.query(func.coalesce(func.sum(Bill.paid_amount), 0)).filter(
+        Bill.created_at >= prev_month_start_dt, Bill.created_at < month_start_dt).scalar()
+
+    unpaid_amount, unpaid_count = db.session.query(
+        func.coalesce(func.sum(Bill.amount - Bill.paid_amount), 0), func.count(Bill.id)
+    ).filter(Bill.status != "paid").one()
+
+    billed_total, collected_total = db.session.query(
+        func.coalesce(func.sum(Bill.amount), 0), func.coalesce(func.sum(Bill.paid_amount), 0)
+    ).one()
+
+    # Rates are based on appointments that already happened
+    past = dict(
+        db.session.query(Appointment.status, func.count(Appointment.id))
+        .filter(Appointment.date < today).group_by(Appointment.status).all()
+    )
+    past_total = sum(past.values())
+
+    billed_patients = db.session.query(func.count(func.distinct(Bill.patient_id))).scalar()
+
+    visits = db.session.query(Appointment.patient_id, func.count(Appointment.id)).filter(
+        Appointment.status == "completed").group_by(Appointment.patient_id).all()
+    returning = sum(1 for _, count in visits if count >= 2)
+
+    kpis = {
+        "total_patients": total_patients,
+        "new_patients": new_patients,
+        "new_patients_change": change(new_patients, new_patients_prev),
+        "today_total": len(todays),
+        "today_done": today_done,
+        "today_left": today_left,
+        "upcoming": upcoming,
+        "active_doctors": active_doctors,
+        "total_doctors": total_doctors,
+        "revenue_month": revenue_month,
+        "revenue_change": change(revenue_month, revenue_prev),
+        "unpaid_amount": unpaid_amount,
+        "unpaid_count": unpaid_count,
+        "cancellation_rate": percent(past.get("cancelled", 0), past_total),
+        "collection_rate": percent(collected_total, billed_total),
+        "no_show_rate": percent(past.get("no_show", 0), past_total),
+        "completion_rate": percent(past.get("completed", 0), past_total),
+        "avg_revenue": collected_total / billed_patients if billed_patients else 0,
+        "returning_rate": percent(returning, len(visits)),
     }
-    return render_template("dashboard.html", counts=counts)
+
+    # ---------- Chart 1: appointments over the last 30 days ----------
+    start = today - timedelta(days=29)
+    days = [start + timedelta(days=i) for i in range(30)]
+    per_day = dict(db.session.query(Appointment.date, func.count(Appointment.id))
+                   .filter(Appointment.date >= start, Appointment.date <= today)
+                   .group_by(Appointment.date).all())
+    completed_per_day = dict(db.session.query(Appointment.date, func.count(Appointment.id))
+                             .filter(Appointment.date >= start, Appointment.date <= today,
+                                     Appointment.status == "completed")
+                             .group_by(Appointment.date).all())
+
+    # ---------- Chart 2: status breakdown ----------
+    status_counts = dict(db.session.query(Appointment.status, func.count(Appointment.id))
+                         .group_by(Appointment.status).all())
+
+    # ---------- Chart 3: revenue for the last 6 months ----------
+    months = last_n_months(6, today)
+    first_month = datetime(months[0][0], months[0][1], 1)
+    billed_by_month = {m: 0 for m in months}
+    collected_by_month = {m: 0 for m in months}
+    for bill in Bill.query.filter(Bill.created_at >= first_month).all():
+        key = (bill.created_at.year, bill.created_at.month)
+        if key in billed_by_month:
+            billed_by_month[key] += bill.amount
+            collected_by_month[key] += bill.paid_amount
+
+    # ---------- Chart 4: busiest departments ----------
+    by_specialty = (db.session.query(Doctor.specialty, func.count(Appointment.id))
+                    .join(Appointment, Appointment.doctor_id == Doctor.id)
+                    .group_by(Doctor.specialty)
+                    .order_by(func.count(Appointment.id).desc()).all())
+
+    # ---------- Chart 5: patients by age group + gender ----------
+    ages = {label: {"Male": 0, "Female": 0} for label, _, _ in AGE_GROUPS}
+    for patient in Patient.query.all():
+        for label, low, high in AGE_GROUPS:
+            if low <= patient.age <= high:
+                ages[label][patient.gender] = ages[label].get(patient.gender, 0) + 1
+                break
+
+    chart_data = {
+        "trend": {
+            "labels": [d.strftime("%d %b") for d in days],
+            "total": [per_day.get(d, 0) for d in days],
+            "completed": [completed_per_day.get(d, 0) for d in days],
+        },
+        "status": {
+            "keys": APPOINTMENT_STATUSES,
+            "labels": [STATUS_LABELS[s] for s in APPOINTMENT_STATUSES],
+            "values": [status_counts.get(s, 0) for s in APPOINTMENT_STATUSES],
+        },
+        "revenue": {
+            "labels": [datetime(y, m, 1).strftime("%b %Y") for y, m in months],
+            "billed": [round(billed_by_month[m]) for m in months],
+            "collected": [round(collected_by_month[m]) for m in months],
+        },
+        "specialty": {
+            "labels": [s for s, _ in by_specialty],
+            "values": [c for _, c in by_specialty],
+        },
+        "ages": {
+            "labels": [label for label, _, _ in AGE_GROUPS],
+            "male": [ages[label]["Male"] for label, _, _ in AGE_GROUPS],
+            "female": [ages[label]["Female"] for label, _, _ in AGE_GROUPS],
+        },
+    }
+
+    # ---------- Tables ----------
+    pending_bills = (Bill.query.filter(Bill.status != "paid")
+                     .order_by((Bill.amount - Bill.paid_amount).desc()).limit(5).all())
+    recent_patients = Patient.query.order_by(Patient.created_at.desc()).limit(5).all()
+
+    completed_by_doctor = dict(db.session.query(Appointment.doctor_id, func.count(Appointment.id))
+                               .filter(Appointment.status == "completed")
+                               .group_by(Appointment.doctor_id).all())
+    revenue_by_doctor = dict(db.session.query(Appointment.doctor_id, func.sum(Bill.paid_amount))
+                             .join(Bill, Bill.appointment_id == Appointment.id)
+                             .group_by(Appointment.doctor_id).all())
+    top_doctors = sorted(Doctor.query.all(), key=lambda d: completed_by_doctor.get(d.id, 0), reverse=True)[:5]
+    top_doctors = [
+        {"doctor": d, "visits": completed_by_doctor.get(d.id, 0), "revenue": revenue_by_doctor.get(d.id, 0) or 0}
+        for d in top_doctors
+    ]
+
+    hour = now.hour
+    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
+
+    return render_template(
+        "dashboard.html",
+        kpis=kpis,
+        chart_data=chart_data,
+        todays=todays,
+        pending_bills=pending_bills,
+        recent_patients=recent_patients,
+        top_doctors=top_doctors,
+        greeting=greeting,
+    )
 
 # ================= PATIENTS =================
 PATIENT_FIELDS = ["name", "gender", "date_of_birth", "phone", "email", "address", "blood_type"]
@@ -162,6 +362,9 @@ def read_patient_form(form):
     data = {field: form.get(field, "").strip() for field in PATIENT_FIELDS}
     errors = []
     dob = None
+
+    if data["name"].islower():
+        data["name"] = data["name"].title()  # "tom cruise" → "Tom Cruise"
 
     if not data["name"]:
         errors.append("Name is required.")
@@ -1176,16 +1379,92 @@ def prescription_delete(prescription_id):
     flash("Prescription deleted.", "info")
     return redirect(url_for("patient_view", patient_id=patient_id))
 
-# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
-def coming_soon(title, icon, phase):
-    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
+# ================= GLOBAL SEARCH =================
+SEARCH_LIMIT = 6  # results shown per section
+
 
 @app.route("/search")
 @login_required
 def search():
     q = request.args.get("q", "").strip()
-    title = f'Search: "{q}"' if q else "Search"
-    return coming_soon(title, "🔍", 11)
+    sections = []
+
+    if len(q) >= 2:
+        like = f"%{q}%"
+        id_match = re.fullmatch(r"#?(\d+)", q)
+        number = int(id_match.group(1)) if id_match else None
+
+        # Patients
+        patients = Patient.query.filter(or_(
+            Patient.name.ilike(like), Patient.phone.ilike(like), Patient.email.ilike(like),
+        )).order_by(Patient.name)
+
+        # Doctors
+        doctors = Doctor.query.filter(or_(
+            Doctor.name.ilike(like), Doctor.specialty.ilike(like), Doctor.email.ilike(like),
+        )).order_by(Doctor.name)
+
+        # Appointments
+        appt_conditions = [Patient.name.ilike(like), Doctor.name.ilike(like), Appointment.reason.ilike(like)]
+        if number:
+            appt_conditions.append(Appointment.id == number)
+        appointments = (Appointment.query
+                        .join(Patient, Appointment.patient_id == Patient.id)
+                        .join(Doctor, Appointment.doctor_id == Doctor.id)
+                        .filter(or_(*appt_conditions))
+                        .order_by(Appointment.date.desc(), Appointment.time.desc()))
+
+        # Prescriptions
+        rx_conditions = [
+            Patient.name.ilike(like),
+            Prescription.diagnosis.ilike(like),
+            Prescription.items.any(PrescriptionItem.medicine.ilike(like)),
+        ]
+        if number:
+            rx_conditions.append(Prescription.id == number)
+        prescriptions = (Prescription.query.join(Patient)
+                         .filter(or_(*rx_conditions))
+                         .order_by(Prescription.created_at.desc()))
+
+        # Bills
+        bill_conditions = [Patient.name.ilike(like)]
+        if number:
+            bill_conditions.append(Bill.id == number)
+        bills = Bill.query.join(Patient).filter(or_(*bill_conditions)).order_by(Bill.created_at.desc())
+
+        for key, title, icon, query, see_all in [
+            ("patients", "Patients", "👥", patients, url_for("patients_list", q=q)),
+            ("doctors", "Doctors", "🩺", doctors, url_for("doctors_list", q=q)),
+            ("appointments", "Appointments", "📅", appointments, url_for("appointments_list", view="all", q=q)),
+            ("prescriptions", "Prescriptions", "💊", prescriptions, url_for("prescriptions_list", q=q)),
+            ("bills", "Bills", "💰", bills, url_for("bills_list", q=q)),
+        ]:
+            count = query.count()
+            if count:
+                sections.append({
+                    "key": key, "title": title, "icon": icon, "count": count,
+                    "items": query.limit(SEARCH_LIMIT).all(), "see_all": see_all,
+                })
+
+    total = sum(s["count"] for s in sections)
+    return render_template("search.html", q=q, sections=sections, total=total)
+
+# ================= ERROR PAGES =================
+@app.errorhandler(404)
+def not_found(error):
+    return render_template(
+        "error.html", code=404, icon="🧭", title="Page not found",
+        message="The page you're looking for doesn't exist or was moved.",
+    ), 404
+
+
+@app.errorhandler(500)
+def server_error(error):
+    db.session.rollback()  # undo any half-finished database change
+    return render_template(
+        "error.html", code=500, icon="🩹", title="Something went wrong",
+        message="An unexpected error happened on our side. Please try again.",
+    ), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
