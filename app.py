@@ -5,9 +5,9 @@ from datetime import date, datetime
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
-from models import db, User, Patient, Doctor, Appointment, Bill, Prescription, BLOOD_TYPES
+from models import db, User, Patient, Doctor, Appointment, Bill, Prescription, BLOOD_TYPES, SPECIALTIES
 
 load_dotenv()
 
@@ -39,10 +39,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^\+?[0-9\s-]{7,20}$")
 
 
+SPECIALTY_ICONS = {
+    "General Medicine": "🩺", "Cardiology": "❤️", "Pediatrics": "🧸", "Orthopedics": "🦴",
+    "Dermatology": "🧴", "Neurology": "🧠", "Gynecology": "🤰", "ENT": "👂",
+    "Ophthalmology": "👁️", "Dentistry": "🦷",
+}
+
+
 @app.context_processor
 def inject_globals():
     """Variables available in every template."""
-    return {"app_name": APP_NAME, "today": date.today()}
+    return {"app_name": APP_NAME, "today": date.today(), "specialty_icons": SPECIALTY_ICONS}
 
 
 def is_safe_next(target):
@@ -307,16 +314,222 @@ def patient_delete(patient_id):
     flash(f"{name} was deleted.", "info")
     return redirect(url_for("patients_list"))
 
+# ================= DOCTORS =================
+DOCTOR_FIELDS = ["name", "specialty", "phone", "email", "consultation_fee", "status"]
+DR_PREFIX_RE = re.compile(r"^dr\.?\s", re.IGNORECASE)
+
+
+def read_doctor_form(form):
+    """Read and check the doctor form. Returns (data, fee, errors)."""
+    data = {field: form.get(field, "").strip() for field in DOCTOR_FIELDS}
+    errors = []
+    fee = None
+
+    if not data["name"]:
+        errors.append("Name is required.")
+    elif len(data["name"]) > 100:
+        errors.append("Name is too long.")
+    elif not DR_PREFIX_RE.match(data["name"]):
+        data["name"] = f"Dr. {data['name']}"  # add "Dr." automatically
+
+    if data["specialty"] not in SPECIALTIES:
+        errors.append("Please choose a specialty.")
+
+    if data["phone"] and not PHONE_RE.match(data["phone"]):
+        errors.append("Please enter a valid phone number.")
+
+    if data["email"] and not EMAIL_RE.match(data["email"]):
+        errors.append("Please enter a valid email.")
+
+    try:
+        fee = float(data["consultation_fee"])
+        if fee < 0 or fee > 100_000:
+            errors.append("Please enter a valid consultation fee.")
+    except ValueError:
+        errors.append("Please enter a valid consultation fee.")
+
+    if data["status"] not in ("active", "off"):
+        data["status"] = "active"
+
+    return data, fee, errors
+
+
+@app.route("/doctors")
+@login_required
+def doctors_list():
+    q = request.args.get("q", "").strip()
+    specialty = request.args.get("specialty", "")
+    status = request.args.get("status", "")
+
+    query = Doctor.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Doctor.name.ilike(like),
+            Doctor.specialty.ilike(like),
+            Doctor.email.ilike(like),
+        ))
+    if specialty in SPECIALTIES:
+        query = query.filter(Doctor.specialty == specialty)
+    if status in ("active", "off"):
+        query = query.filter(Doctor.status == status)
+
+    doctors = query.order_by(Doctor.status.asc(), Doctor.name.asc()).all()
+
+    # Appointment counts per doctor (one query each, not one per doctor)
+    total_counts = dict(
+        db.session.query(Appointment.doctor_id, func.count(Appointment.id))
+        .group_by(Appointment.doctor_id).all()
+    )
+    today_counts = dict(
+        db.session.query(Appointment.doctor_id, func.count(Appointment.id))
+        .filter(Appointment.date == date.today(), Appointment.status != "cancelled")
+        .group_by(Appointment.doctor_id).all()
+    )
+
+    return render_template(
+        "doctors/list.html",
+        doctors=doctors,
+        total_counts=total_counts,
+        today_counts=today_counts,
+        active_count=Doctor.query.filter_by(status="active").count(),
+        specialties=SPECIALTIES,
+        q=q, specialty=specialty, status=status,
+    )
+
+
+@app.route("/doctors/new", methods=["GET", "POST"])
+@login_required
+def doctor_new():
+    form = {"status": "active"}
+    if request.method == "POST":
+        form, fee, errors = read_doctor_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            doctor = Doctor(
+                name=form["name"],
+                specialty=form["specialty"],
+                phone=form["phone"] or None,
+                email=form["email"] or None,
+                consultation_fee=fee,
+                status=form["status"],
+            )
+            db.session.add(doctor)
+            db.session.commit()
+            flash(f"{doctor.name} was added. ✅", "success")
+            return redirect(url_for("doctor_view", doctor_id=doctor.id))
+
+    return render_template("doctors/form.html", form=form, doctor=None, specialties=SPECIALTIES)
+
+
+@app.route("/doctors/<int:doctor_id>")
+@login_required
+def doctor_view(doctor_id):
+    doctor = db.get_or_404(Doctor, doctor_id)
+    today = date.today()
+    appts = doctor.appointments
+
+    revenue = (
+        db.session.query(func.coalesce(func.sum(Bill.paid_amount), 0))
+        .join(Appointment, Bill.appointment_id == Appointment.id)
+        .filter(Appointment.doctor_id == doctor.id)
+        .scalar()
+    )
+
+    stats = {
+        "total": len(appts),
+        "completed": sum(1 for a in appts if a.status == "completed"),
+        "today": sum(1 for a in appts if a.date == today and a.status != "cancelled"),
+        "patients": len({a.patient_id for a in appts}),
+        "revenue": revenue,
+    }
+
+    upcoming = sorted(
+        (a for a in appts if a.status == "scheduled" and a.date >= today),
+        key=lambda a: (a.date, a.time),
+    )[:10]
+    recent = sorted(
+        (a for a in appts if a.date < today),
+        key=lambda a: (a.date, a.time),
+        reverse=True,
+    )[:10]
+
+    return render_template("doctors/profile.html", doctor=doctor, stats=stats,
+                           upcoming=upcoming, recent=recent)
+
+
+@app.route("/doctors/<int:doctor_id>/edit", methods=["GET", "POST"])
+@login_required
+def doctor_edit(doctor_id):
+    doctor = db.get_or_404(Doctor, doctor_id)
+
+    if request.method == "POST":
+        form, fee, errors = read_doctor_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            doctor.name = form["name"]
+            doctor.specialty = form["specialty"]
+            doctor.phone = form["phone"] or None
+            doctor.email = form["email"] or None
+            doctor.consultation_fee = fee
+            doctor.status = form["status"]
+            db.session.commit()
+            flash("Doctor details updated. ✅", "success")
+            return redirect(url_for("doctor_view", doctor_id=doctor.id))
+    else:
+        form = {
+            "name": doctor.name,
+            "specialty": doctor.specialty,
+            "phone": doctor.phone or "",
+            "email": doctor.email or "",
+            "consultation_fee": f"{doctor.consultation_fee:g}",
+            "status": doctor.status,
+        }
+
+    return render_template("doctors/form.html", form=form, doctor=doctor, specialties=SPECIALTIES)
+
+
+@app.route("/doctors/<int:doctor_id>/toggle", methods=["POST"])
+@login_required
+def doctor_toggle(doctor_id):
+    doctor = db.get_or_404(Doctor, doctor_id)
+    doctor.status = "off" if doctor.status == "active" else "active"
+    db.session.commit()
+
+    label = "available again" if doctor.status == "active" else "set to off duty"
+    flash(f"{doctor.name} is {label}.", "success")
+
+    next_url = request.form.get("next")
+    return redirect(next_url if is_safe_next(next_url) else url_for("doctor_view", doctor_id=doctor.id))
+
+
+@app.route("/doctors/<int:doctor_id>/delete", methods=["POST"])
+@login_required
+def doctor_delete(doctor_id):
+    doctor = db.get_or_404(Doctor, doctor_id)
+
+    # Keep patient history safe: don't delete doctors who have appointments
+    if doctor.appointments:
+        flash(f"{doctor.name} has appointments, so they can't be deleted. Set them to Off instead.", "warning")
+        return redirect(url_for("doctor_view", doctor_id=doctor.id))
+
+    name = doctor.name
+    db.session.delete(doctor)
+    db.session.commit()
+    flash(f"{name} was deleted.", "info")
+    return redirect(url_for("doctors_list"))
+
 # ================= PLACEHOLDER PAGES (replaced in the next phases) =================
 def coming_soon(title, icon, phase):
     return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
 
 
 
-@app.route("/doctors")
-@login_required
-def doctors_list():
-    return coming_soon("Doctors", "🩺", 5)
+
 
 
 @app.route("/appointments")

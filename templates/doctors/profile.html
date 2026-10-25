@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}{{ doctor.name }}{% endblock %}
+{% block page_title %}Doctor profile{% endblock %}
+
+{% macro appointment_table(items, empty_text) %}
+  {% if items %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in items %}
+            <tr>
+              <td>{{ a.date.strftime("%a, %d %b %Y") }}</td>
+              <td>{{ a.time.strftime("%I:%M %p") }}</td>
+              <td>
+                <a href="{{ url_for('patient_view', patient_id=a.patient.id) }}" class="person">
+                  <span class="avatar sm">{{ a.patient.name[0] | upper }}</span>
+                  <span class="person-name">{{ a.patient.name }}</span>
+                </a>
+              </td>
+              <td>{{ a.reason or "–" }}</td>
+              <td>{{ status_badge(a.status) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty-inline">{{ empty_text }}</p>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('doctors_list') }}" class="back-link">← All doctors</a>
+    <h2>{{ doctor.name }}</h2>
+    <p class="muted">{{ doctor.specialty }} · Joined {{ doctor.created_at.strftime("%b %Y") }}</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('doctor_edit', doctor_id=doctor.id) }}" class="btn btn-outline">✏️ Edit</a>
+    <form method="post" action="{{ url_for('doctor_toggle', doctor_id=doctor.id) }}">
+      <button type="submit" class="btn btn-outline">
+        {{ "⏸️ Set off" if doctor.status == "active" else "▶️ Set active" }}
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('doctor_delete', doctor_id=doctor.id) }}"
+          onsubmit="return confirm('Delete {{ doctor.name }}?');">
+      <button type="submit" class="btn btn-danger">🗑️ Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="profile-grid">
+  <!-- Left: info -->
+  <aside class="card profile-card">
+    <div class="profile-top">
+      <div class="doctor-icon lg">{{ specialty_icons.get(doctor.specialty, "🩺") }}</div>
+      <h3>{{ doctor.name }}</h3>
+      <p class="muted">{{ doctor.specialty }}</p>
+      {{ status_badge(doctor.status) }}
+    </div>
+    <dl class="info-list">
+      <div><dt>💵 Consultation fee</dt><dd>{{ "{:,.0f}".format(doctor.consultation_fee) }} EGP</dd></div>
+      <div><dt>📞 Phone</dt><dd>{{ doctor.phone or "–" }}</dd></div>
+      <div><dt>✉️ Email</dt><dd>{{ doctor.email or "–" }}</dd></div>
+      <div><dt>📆 Joined</dt><dd>{{ doctor.created_at.strftime("%d %b %Y") }}</dd></div>
+    </dl>
+  </aside>
+
+  <!-- Right: stats + appointments -->
+  <div class="profile-main">
+    <div class="stats-grid mini">
+      <div class="stat-card"><div class="stat-icon">📅</div><div><div class="stat-label">Appointments</div><div class="stat-value">{{ stats.total }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">✅</div><div><div class="stat-label">Completed</div><div class="stat-value">{{ stats.completed }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">🕒</div><div><div class="stat-label">Today</div><div class="stat-value">{{ stats.today }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">👥</div><div><div class="stat-label">Patients</div><div class="stat-value">{{ stats.patients }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">💰</div><div><div class="stat-label">Revenue (EGP)</div><div class="stat-value">{{ "{:,.0f}".format(stats.revenue) }}</div></div></div>
+    </div>
+
+    <section class="card table-card">
+      <div class="section-head"><h3>🗓️ Upcoming appointments</h3><span class="muted">next {{ upcoming | length }}</span></div>
+      {{ appointment_table(upcoming, "No upcoming appointments.") }}
+    </section>
+
+    <section class="card table-card">
+      <div class="section-head"><h3>🕘 Recent visits</h3><span class="muted">last {{ recent | length }}</span></div>
+      {{ appointment_table(recent, "No past visits yet.") }}
+    </section>
+  </div>
+</div>
+{% endblock %}

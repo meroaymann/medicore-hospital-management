@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Doctors{% endblock %}
+{% block page_title %}Doctors{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Doctors</h2>
+    <p class="muted">{{ doctors | length }} shown · {{ active_count }} active</p>
+  </div>
+  <a href="{{ url_for('doctor_new') }}" class="btn btn-primary">+ Add doctor</a>
+</div>
+
+<!-- Filters -->
+<form method="get" class="card toolbar">
+  <div class="field grow">
+    <label for="q">Search</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Name, specialty or email">
+  </div>
+  <div class="field">
+    <label for="specialty">Specialty</label>
+    <select id="specialty" name="specialty">
+      <option value="">All specialties</option>
+      {% for s in specialties %}
+        <option value="{{ s }}" {% if specialty == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">All</option>
+      <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+      <option value="off" {% if status == "off" %}selected{% endif %}>Off</option>
+    </select>
+  </div>
+  <div class="toolbar-actions">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    {% if q or specialty or status %}
+      <a href="{{ url_for('doctors_list') }}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if doctors %}
+  <div class="doctor-grid">
+    {% for d in doctors %}
+      <div class="card doctor-card {% if d.status == 'off' %}is-off{% endif %}">
+        <div class="doctor-card-top">
+          <div class="doctor-icon">{{ specialty_icons.get(d.specialty, "🩺") }}</div>
+          {{ status_badge(d.status) }}
+        </div>
+
+        <a href="{{ url_for('doctor_view', doctor_id=d.id) }}" class="doctor-name">{{ d.name }}</a>
+        <p class="doctor-specialty">{{ d.specialty }}</p>
+
+        <div class="doctor-meta">
+          <div><span>Fee</span><strong>{{ "{:,.0f}".format(d.consultation_fee) }} EGP</strong></div>
+          <div><span>Today</span><strong>{{ today_counts.get(d.id, 0) }}</strong></div>
+          <div><span>Total</span><strong>{{ total_counts.get(d.id, 0) }}</strong></div>
+        </div>
+
+        <p class="doctor-contact">📞 {{ d.phone or "–" }}</p>
+
+        <div class="doctor-actions">
+          <a href="{{ url_for('doctor_view', doctor_id=d.id) }}" class="btn btn-outline btn-sm">View</a>
+          <a href="{{ url_for('doctor_edit', doctor_id=d.id) }}" class="btn btn-outline btn-sm">Edit</a>
+          <form method="post" action="{{ url_for('doctor_toggle', doctor_id=d.id) }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit" class="btn btn-outline btn-sm">
+              {{ "Set off" if d.status == "active" else "Set active" }}
+            </button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card empty-state">
+    <div class="big-icon">🔍</div>
+    <h3>No doctors found</h3>
+    <p class="muted">Try a different search, or add a new doctor.</p>
+  </div>
+{% endif %}
+{% endblock %}

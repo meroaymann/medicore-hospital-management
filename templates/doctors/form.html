@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set editing = doctor is not none %}
+{% block title %}{{ "Edit doctor" if editing else "Add doctor" }}{% endblock %}
+{% block page_title %}{{ "Edit doctor" if editing else "Add doctor" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('doctor_view', doctor_id=doctor.id) if editing else url_for('doctors_list') }}" class="back-link">← Back</a>
+    <h2>{{ "Edit " ~ doctor.name if editing else "Add a new doctor" }}</h2>
+    <p class="muted">Fields marked with * are required.</p>
+  </div>
+</div>
+
+<form method="post" class="card form-card">
+  <div class="form-grid">
+    <div class="field span-2">
+      <label for="name">Full name *</label>
+      <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100"
+             placeholder="Dr. Salma Adel" required>
+      <span class="field-hint">"Dr." is added automatically if you leave it out.</span>
+    </div>
+
+    <div class="field">
+      <label for="specialty">Specialty *</label>
+      <select id="specialty" name="specialty" required>
+        <option value="">Choose...</option>
+        {% for s in specialties %}
+          <option value="{{ s }}" {% if form.get('specialty') == s %}selected{% endif %}>
+            {{ specialty_icons.get(s, "🩺") }} {{ s }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="consultation_fee">Consultation fee (EGP) *</label>
+      <input id="consultation_fee" type="number" name="consultation_fee" min="0" step="10"
+             value="{{ form.get('consultation_fee', '') }}" placeholder="400" required>
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input id="phone" type="tel" name="phone" value="{{ form.get('phone', '') }}" placeholder="01012345678">
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" value="{{ form.get('email', '') }}" placeholder="doctor@hospital.com">
+    </div>
+
+    <div class="field span-2">
+      <label>Status</label>
+      <div class="radio-group">
+        <label class="radio-card">
+          <input type="radio" name="status" value="active" {% if form.get('status') != 'off' %}checked{% endif %}>
+          <span>🟢 Active <small>Available for appointments</small></span>
+        </label>
+        <label class="radio-card">
+          <input type="radio" name="status" value="off" {% if form.get('status') == 'off' %}checked{% endif %}>
+          <span>⚪ Off <small>Not taking appointments</small></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{{ url_for('doctor_view', doctor_id=doctor.id) if editing else url_for('doctors_list') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{ "Save changes" if editing else "Add doctor" }}</button>
+  </div>
+</form>
+{% endblock %}

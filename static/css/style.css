@@ -757,3 +757,92 @@ a.page-link:hover { border-color: var(--primary); color: var(--primary); }
   .header-actions { width: 100%; }
   .pagination-bar { justify-content: center; }
 }
+
+/* ================= DOCTORS ================= */
+.doctor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.doctor-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.doctor-card:hover { transform: translateY(-3px); border-color: var(--primary); }
+.doctor-card.is-off { opacity: 0.65; }
+.doctor-card.is-off:hover { opacity: 1; }
+
+.doctor-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.doctor-icon {
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  border-radius: 16px;
+  background: var(--primary-soft);
+  font-size: 1.6rem;
+}
+.doctor-icon.lg { width: 84px; height: 84px; margin-bottom: 6px; border-radius: 24px; font-size: 2.6rem; }
+
+.doctor-name {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.doctor-name:hover { color: var(--primary); }
+.doctor-specialty { font-size: 0.85rem; font-weight: 600; color: var(--primary); }
+
+.doctor-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.doctor-meta div { display: flex; flex-direction: column; gap: 2px; }
+.doctor-meta span { font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+.doctor-meta strong { font-size: 0.9rem; }
+
+.doctor-contact { font-size: 0.82rem; color: var(--muted); }
+
+.doctor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Radio cards (status picker) ---------- */
+.radio-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+.radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.radio-card input { margin-top: 3px; accent-color: var(--primary); }
+.radio-card small { display: block; margin-top: 2px; font-size: 0.75rem; font-weight: 500; color: var(--muted); }
+.radio-card:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+
+@media (max-width: 640px) {
+  .radio-group { grid-template-columns: 1fr; }
+}
