@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy import or_, func
 
 from models import (
-    db, User, Patient, Doctor, Appointment, Bill, Prescription,
+    db, User, Patient, Doctor, Appointment, Bill, Prescription, PrescriptionItem,
     BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES, PAYMENT_METHODS,
 )
 
@@ -990,16 +990,195 @@ def bill_payment(bill_id):
 
     return redirect(url_for("bill_view", bill_id=bill.id))
 
-# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
-def coming_soon(title, icon, phase):
-    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
+# ================= PRESCRIPTIONS =================
+MEDICINE_SUGGESTIONS = [
+    "Paracetamol 500mg", "Ibuprofen 400mg", "Amoxicillin 500mg", "Azithromycin 250mg",
+    "Omeprazole 20mg", "Cetirizine 10mg", "Vitamin D3 1000 IU", "Metformin 500mg",
+    "Amlodipine 5mg", "Salbutamol inhaler", "Saline nasal spray", "Loratadine 10mg",
+]
+FREQUENCY_SUGGESTIONS = [
+    "Once daily", "Twice daily", "Three times daily", "Every 8 hours",
+    "Once daily at night", "Twice daily after meals", "When needed",
+]
+
+
+def read_prescription_form(form):
+    """Read the diagnosis + all medicine rows. Returns (data, errors)."""
+    data = {
+        "diagnosis": form.get("diagnosis", "").strip(),
+        "notes": form.get("notes", "").strip(),
+        "items": [],
+    }
+    errors = []
+
+    rows = zip(
+        form.getlist("medicine"),
+        form.getlist("dosage"),
+        form.getlist("frequency"),
+        form.getlist("duration"),
+    )
+    for medicine, dosage, frequency, duration in rows:
+        item = {
+            "medicine": medicine.strip(),
+            "dosage": dosage.strip(),
+            "frequency": frequency.strip(),
+            "duration": duration.strip(),
+        }
+        if not any(item.values()):
+            continue  # skip completely empty rows
+        if not item["medicine"]:
+            errors.append("Each medicine row needs a medicine name.")
+        elif len(item["medicine"]) > 100 or any(len(item[k]) > 50 for k in ("dosage", "frequency", "duration")):
+            errors.append(f"Some details for {item['medicine']} are too long.")
+        data["items"].append(item)
+
+    if not data["diagnosis"]:
+        errors.append("Diagnosis is required.")
+    elif len(data["diagnosis"]) > 200:
+        errors.append("Diagnosis is too long (max 200 characters).")
+
+    if not data["items"]:
+        errors.append("Add at least one medicine.")
+
+    return data, list(dict.fromkeys(errors))  # remove repeated messages
+
+
+def prescription_form_context():
+    return {"medicine_suggestions": MEDICINE_SUGGESTIONS, "frequency_suggestions": FREQUENCY_SUGGESTIONS}
 
 
 @app.route("/prescriptions")
 @login_required
 def prescriptions_list():
-    return coming_soon("Prescriptions", "💊", 8)
+    q = request.args.get("q", "").strip()
+    doctor_id = request.args.get("doctor_id", type=int)
+    page = request.args.get("page", 1, type=int)
 
+    query = Prescription.query.join(Patient)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Patient.name.ilike(like),
+            Prescription.diagnosis.ilike(like),
+            Prescription.items.any(PrescriptionItem.medicine.ilike(like)),
+        ))
+    if doctor_id:
+        query = query.filter(Prescription.doctor_id == doctor_id)
+
+    pager = query.order_by(Prescription.created_at.desc()).paginate(page=page, per_page=12, error_out=False)
+
+    # Recent completed visits that don't have a prescription yet
+    pending_query = Appointment.query.filter(
+        Appointment.status == "completed",
+        ~Appointment.prescription.has(),
+    ).order_by(Appointment.date.desc(), Appointment.time.desc())
+
+    return render_template(
+        "prescriptions/list.html",
+        pager=pager,
+        q=q,
+        doctor_id=doctor_id,
+        doctors=Doctor.query.order_by(Doctor.name).all(),
+        pending=pending_query.limit(5).all(),
+        pending_count=pending_query.count(),
+    )
+
+
+@app.route("/prescriptions/new", methods=["GET", "POST"])
+@login_required
+def prescription_new():
+    appointment_id = request.values.get("appointment_id", type=int)
+    appointment = db.session.get(Appointment, appointment_id) if appointment_id else None
+
+    if not appointment:
+        flash("Choose a completed appointment to write a prescription for.", "warning")
+        return redirect(url_for("prescriptions_list"))
+    if appointment.prescription:
+        flash("This appointment already has a prescription.", "info")
+        return redirect(url_for("prescription_view", prescription_id=appointment.prescription.id))
+    if appointment.status != "completed":
+        flash("Prescriptions can only be written for completed appointments.", "warning")
+        return redirect(url_for("appointment_view", appointment_id=appointment.id))
+
+    form = {"diagnosis": "", "notes": "", "items": []}
+
+    if request.method == "POST":
+        form, errors = read_prescription_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            prescription = Prescription(
+                appointment_id=appointment.id,
+                patient_id=appointment.patient_id,
+                doctor_id=appointment.doctor_id,
+                diagnosis=form["diagnosis"],
+                notes=form["notes"] or None,
+            )
+            for item in form["items"]:
+                prescription.items.append(PrescriptionItem(**item))
+            db.session.add(prescription)
+            db.session.commit()
+            flash(f"Prescription saved for {appointment.patient.name}. 💊", "success")
+            return redirect(url_for("prescription_view", prescription_id=prescription.id))
+
+    return render_template("prescriptions/form.html", form=form, a=appointment, prescription=None,
+                           **prescription_form_context())
+
+
+@app.route("/prescriptions/<int:prescription_id>")
+@login_required
+def prescription_view(prescription_id):
+    prescription = db.get_or_404(Prescription, prescription_id)
+    return render_template("prescriptions/view.html", rx=prescription)
+
+
+@app.route("/prescriptions/<int:prescription_id>/edit", methods=["GET", "POST"])
+@login_required
+def prescription_edit(prescription_id):
+    prescription = db.get_or_404(Prescription, prescription_id)
+
+    if request.method == "POST":
+        form, errors = read_prescription_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            prescription.diagnosis = form["diagnosis"]
+            prescription.notes = form["notes"] or None
+            prescription.items.clear()  # old rows are deleted automatically
+            for item in form["items"]:
+                prescription.items.append(PrescriptionItem(**item))
+            db.session.commit()
+            flash("Prescription updated. ✅", "success")
+            return redirect(url_for("prescription_view", prescription_id=prescription.id))
+    else:
+        form = {
+            "diagnosis": prescription.diagnosis,
+            "notes": prescription.notes or "",
+            "items": [
+                {"medicine": i.medicine, "dosage": i.dosage or "", "frequency": i.frequency or "", "duration": i.duration or ""}
+                for i in prescription.items
+            ],
+        }
+
+    return render_template("prescriptions/form.html", form=form, a=prescription.appointment,
+                           prescription=prescription, **prescription_form_context())
+
+
+@app.route("/prescriptions/<int:prescription_id>/delete", methods=["POST"])
+@login_required
+def prescription_delete(prescription_id):
+    prescription = db.get_or_404(Prescription, prescription_id)
+    patient_id = prescription.patient_id
+    db.session.delete(prescription)  # its medicine rows are deleted too
+    db.session.commit()
+    flash("Prescription deleted.", "info")
+    return redirect(url_for("patient_view", patient_id=patient_id))
+
+# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
+def coming_soon(title, icon, phase):
+    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
 
 @app.route("/search")
 @login_required

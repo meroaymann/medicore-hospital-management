@@ -1130,3 +1130,117 @@ a.page-link:hover { border-color: var(--primary); color: var(--primary); }
   }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ================= PRESCRIPTIONS ================= */
+.med-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.med-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.med-chip.more { background: var(--surface-2); color: var(--muted); }
+
+/* ---------- Write / edit form ---------- */
+.rx-form { display: flex; flex-direction: column; gap: 18px; max-width: 980px; }
+.rx-meds-head { margin: 6px 0 0; }
+.med-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.med-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.4fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  animation: slideIn 0.25s ease;
+}
+.med-row .field input { background: var(--surface); }
+.remove-row { width: 42px; height: 44px; color: var(--danger); }
+.remove-row:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+/* ---------- Prescription sheet ---------- */
+.rx-sheet { max-width: 860px; padding: 40px; }
+
+.rx-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 22px;
+  border-bottom: 3px solid var(--primary);
+}
+.rx-head .brand small { display: block; font-size: 0.75rem; font-weight: 500; }
+.rx-doctor { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.rx-doctor strong { font-size: 1.1rem; }
+.rx-doctor span { font-size: 0.85rem; color: var(--muted); }
+
+.rx-patient {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: 22px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.rx-patient div { display: flex; flex-direction: column; gap: 2px; }
+.rx-patient strong { font-size: 0.92rem; }
+
+.rx-diagnosis { margin-bottom: 22px; }
+.rx-diagnosis p { font-size: 1.05rem; font-weight: 600; }
+
+.rx-body { display: flex; gap: 20px; min-height: 160px; }
+.rx-symbol {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 3.4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary);
+}
+.rx-list { flex: 1; display: flex; flex-direction: column; gap: 14px; padding-left: 20px; }
+.rx-list li { padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
+.rx-list strong { display: block; font-size: 1rem; }
+.rx-list span { font-size: 0.88rem; color: var(--muted); }
+
+.rx-notes-box {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--primary);
+  border-radius: 10px;
+  background: var(--primary-soft);
+}
+.rx-notes-box p { font-size: 0.9rem; }
+
+.rx-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin-top: 40px;
+}
+.rx-foot p { max-width: 380px; font-size: 0.8rem; }
+.rx-signature { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; }
+.sign-line { width: 200px; border-bottom: 1.5px solid var(--text); }
+
+@media (max-width: 900px) {
+  .med-row { grid-template-columns: 1fr 1fr; }
+  .med-row .field:first-child { grid-column: span 2; }
+  .remove-row { width: 100%; grid-column: span 2; }
+  .rx-patient { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .rx-sheet { padding: 22px; }
+  .rx-doctor { align-items: flex-start; text-align: left; }
+}
+
+/* ---------- Print the prescription ---------- */
+@media print {
+  .rx-sheet { max-width: none; padding: 0; border: none; box-shadow: none; }
+}

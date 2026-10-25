@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination with context %}
+{% block title %}Prescriptions{% endblock %}
+{% block page_title %}Prescriptions{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Prescriptions</h2>
+    <p class="muted">{{ pager.total }} prescription{{ "" if pager.total == 1 else "s" }}</p>
+  </div>
+</div>
+
+<!-- Awaiting prescription -->
+{% if pending %}
+  <section class="card ready-card">
+    <div class="section-head">
+      <h3>📝 Awaiting prescription</h3>
+      <span class="muted">{{ pending_count }} completed visit{{ "" if pending_count == 1 else "s" }} without a prescription</span>
+    </div>
+    <div class="ready-list">
+      {% for a in pending %}
+        <div class="ready-item">
+          <div>
+            <span class="person-name">{{ a.patient.name }}</span>
+            <span class="person-sub">{{ a.doctor.name }} · {{ a.date.strftime("%d %b") }} · {{ a.reason or "No reason given" }}</span>
+          </div>
+          <a href="{{ url_for('prescription_new', appointment_id=a.id) }}" class="btn btn-primary btn-sm">Write prescription</a>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+<!-- Filters -->
+<form method="get" class="card toolbar">
+  <div class="field grow">
+    <label for="q">Search</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Patient, diagnosis or medicine">
+  </div>
+  <div class="field">
+    <label for="doctor_id">Doctor</label>
+    <select id="doctor_id" name="doctor_id">
+      <option value="">All doctors</option>
+      {% for d in doctors %}
+        <option value="{{ d.id }}" {% if doctor_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="toolbar-actions">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    {% if q or doctor_id %}
+      <a href="{{ url_for('prescriptions_list') }}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Table -->
+<div class="card table-card">
+  {% if pager.items %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Patient</th>
+            <th>Doctor</th>
+            <th>Diagnosis</th>
+            <th>Medicines</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rx in pager.items %}
+            <tr>
+              <td>
+                <a href="{{ url_for('prescription_view', prescription_id=rx.id) }}" class="link-strong">{{ rx.created_at.strftime("%d %b %Y") }}</a>
+                <span class="person-sub">Rx #{{ rx.id }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('patient_view', patient_id=rx.patient.id) }}" class="person">
+                  <span class="avatar sm">{{ rx.patient.name[0] | upper }}</span>
+                  <span class="person-name">{{ rx.patient.name }}</span>
+                </a>
+              </td>
+              <td>
+                <span class="person-name">{{ rx.doctor.name }}</span>
+                <span class="person-sub">{{ rx.doctor.specialty }}</span>
+              </td>
+              <td>{{ rx.diagnosis }}</td>
+              <td>
+                <div class="med-chips">
+                  {% for item in rx.items[:2] %}<span class="med-chip">💊 {{ item.medicine }}</span>{% endfor %}
+                  {% if rx.items | length > 2 %}<span class="med-chip more">+{{ rx.items | length - 2 }}</span>{% endif %}
+                </div>
+              </td>
+              <td class="text-right">
+                <div class="row-actions">
+                  <a href="{{ url_for('prescription_view', prescription_id=rx.id) }}" class="btn btn-outline btn-sm">View</a>
+                  <a href="{{ url_for('prescription_edit', prescription_id=rx.id) }}" class="btn btn-outline btn-sm">Edit</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pagination(pager, "prescriptions_list") }}
+  {% else %}
+    <div class="empty-state">
+      <div class="big-icon">💊</div>
+      <h3>No prescriptions found</h3>
+      <p class="muted">Try a different search.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

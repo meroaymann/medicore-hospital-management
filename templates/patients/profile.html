@@ -108,7 +108,7 @@
           {% for rx in prescriptions %}
             <div class="rx-item">
               <div class="rx-head">
-                <strong>{{ rx.diagnosis }}</strong>
+                <a href="{{ url_for('prescription_view', prescription_id=rx.id) }}" class="link-strong">{{ rx.diagnosis }}</a>
                 <span class="muted">{{ rx.created_at.strftime("%d %b %Y") }} · {{ rx.doctor.name }}</span>
               </div>
               <ul class="rx-meds">

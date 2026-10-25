@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% set editing = prescription is not none %}
+{% block title %}{{ "Edit prescription" if editing else "Write prescription" }}{% endblock %}
+{% block page_title %}{{ "Edit prescription" if editing else "Write prescription" }}{% endblock %}
+
+{% macro med_row(item={}) %}
+  <div class="med-row">
+    <div class="field">
+      <label>Medicine *</label>
+      <input name="medicine" list="medicineList" value="{{ item.get('medicine', '') }}" maxlength="100" placeholder="e.g. Paracetamol 500mg">
+    </div>
+    <div class="field">
+      <label>Dosage</label>
+      <input name="dosage" value="{{ item.get('dosage', '') }}" maxlength="50" placeholder="1 tablet">
+    </div>
+    <div class="field">
+      <label>Frequency</label>
+      <input name="frequency" list="frequencyList" value="{{ item.get('frequency', '') }}" maxlength="50" placeholder="Twice daily">
+    </div>
+    <div class="field">
+      <label>Duration</label>
+      <input name="duration" value="{{ item.get('duration', '') }}" maxlength="50" placeholder="5 days">
+    </div>
+    <button type="button" class="icon-btn remove-row" title="Remove medicine" aria-label="Remove medicine">✕</button>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    {% if editing %}
+      <a href="{{ url_for('prescription_view', prescription_id=prescription.id) }}" class="back-link">← Back to prescription</a>
+    {% else %}
+      <a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="back-link">← Back to appointment</a>
+    {% endif %}
+    <h2>{{ "Edit prescription #" ~ prescription.id if editing else "Write a prescription" }}</h2>
+    {% if a %}
+      <p class="muted">{{ a.patient.name }} · {{ a.doctor.name }} · {{ a.date.strftime("%d %b %Y") }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<form method="post" class="card form-card rx-form">
+  {% if a and not editing %}<input type="hidden" name="appointment_id" value="{{ a.id }}">{% endif %}
+
+  <div class="field">
+    <label for="diagnosis">Diagnosis *</label>
+    <input id="diagnosis" name="diagnosis" value="{{ form.diagnosis }}" maxlength="200"
+           placeholder="e.g. Upper respiratory infection" required>
+  </div>
+
+  <div class="section-head rx-meds-head">
+    <h3>💊 Medicines</h3>
+    <button type="button" id="addRow" class="btn btn-outline btn-sm">+ Add medicine</button>
+  </div>
+
+  <div id="medRows" class="med-rows">
+    {% for item in form["items"] %}
+      {{ med_row(item) }}
+    {% else %}
+      {{ med_row() }}
+    {% endfor %}
+  </div>
+
+  <div class="field">
+    <label for="notes">Notes for the patient</label>
+    <textarea id="notes" name="notes" rows="3" placeholder="e.g. Drink plenty of water. Come back if symptoms continue.">{{ form.notes }}</textarea>
+  </div>
+
+  <!-- Suggestions shown while typing -->
+  <datalist id="medicineList">
+    {% for m in medicine_suggestions %}<option value="{{ m }}">{% endfor %}
+  </datalist>
+  <datalist id="frequencyList">
+    {% for f in frequency_suggestions %}<option value="{{ f }}">{% endfor %}
+  </datalist>
+
+  <!-- Empty row used by "+ Add medicine" -->
+  <template id="rowTemplate">{{ med_row() }}</template>
+
+  <div class="form-actions">
+    {% if editing %}
+      <a href="{{ url_for('prescription_view', prescription_id=prescription.id) }}" class="btn btn-outline">Cancel</a>
+    {% else %}
+      <a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="btn btn-outline">Cancel</a>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">{{ "Save changes" if editing else "Save prescription" }}</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Add / remove medicine rows
+  const rowsBox = document.getElementById("medRows");
+  const template = document.getElementById("rowTemplate");
+
+  function updateRemoveButtons() {
+    const rows = rowsBox.querySelectorAll(".med-row");
+    rows.forEach((row) => {
+      row.querySelector(".remove-row").disabled = rows.length === 1;
+    });
+  }
+
+  document.getElementById("addRow").addEventListener("click", () => {
+    rowsBox.appendChild(template.content.cloneNode(true));
+    updateRemoveButtons();
+    rowsBox.lastElementChild.querySelector("input").focus();
+  });
+
+  rowsBox.addEventListener("click", (e) => {
+    const btn = e.target.closest(".remove-row");
+    if (!btn || btn.disabled) return;
+    btn.closest(".med-row").remove();
+    updateRemoveButtons();
+  });
+
+  updateRemoveButtons();
+</script>
+{% endblock %}

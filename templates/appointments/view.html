@@ -93,7 +93,7 @@
     {% endif %}
   </section>
 
-  <!-- Prescription -->
+    <!-- Prescription -->
   <section class="card">
     <div class="section-head"><h3>💊 Prescription</h3></div>
     {% if a.prescription %}
@@ -103,9 +103,11 @@
           <li><strong>{{ item.medicine }}</strong> · {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }}</li>
         {% endfor %}
       </ul>
+      <a href="{{ url_for('prescription_view', prescription_id=a.prescription.id) }}" class="btn btn-outline btn-sm card-link">📄 View prescription</a>
+    {% elif a.status == "completed" %}
+      <p class="muted">No prescription has been written for this visit yet.</p>
+      <a href="{{ url_for('prescription_new', appointment_id=a.id) }}" class="btn btn-primary btn-sm card-link">+ Write prescription</a>
     {% else %}
-      <p class="muted">No prescription yet. Adding prescriptions comes in Phase 8. 📝</p>
+      <p class="muted">A prescription can be written once the appointment is completed.</p>
     {% endif %}
   </section>
-</div>
-{% endblock %}

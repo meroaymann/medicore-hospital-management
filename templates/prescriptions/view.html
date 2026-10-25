@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Prescription #{{ rx.id }}{% endblock %}
+{% block page_title %}Prescription{% endblock %}
+
+{% block content %}
+<div class="page-header no-print">
+  <div>
+    <a href="{{ url_for('prescriptions_list') }}" class="back-link">← All prescriptions</a>
+    <h2>Prescription #{{ rx.id }}</h2>
+    <p class="muted">{{ rx.patient.name }} · {{ rx.created_at.strftime("%d %b %Y") }}</p>
+  </div>
+  <div class="header-actions">
+    {% if rx.appointment %}<a href="{{ url_for('appointment_view', appointment_id=rx.appointment.id) }}" class="btn btn-outline">📅 Appointment</a>{% endif %}
+    <a href="{{ url_for('prescription_edit', prescription_id=rx.id) }}" class="btn btn-outline">✏️ Edit</a>
+    <form method="post" action="{{ url_for('prescription_delete', prescription_id=rx.id) }}"
+          onsubmit="return confirm('Delete this prescription?');">
+      <button type="submit" class="btn btn-outline">🗑️ Delete</button>
+    </form>
+    <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
+  </div>
+</div>
+
+<article class="card rx-sheet">
+  <!-- Header -->
+  <header class="rx-head">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+          <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+        </svg>
+      </div>
+      <div>
+        <span>{{ app_name }}</span>
+        <small class="muted">Hospital Management · Cairo, Egypt</small>
+      </div>
+    </div>
+    <div class="rx-doctor">
+      <strong>{{ rx.doctor.name }}</strong>
+      <span>{{ rx.doctor.specialty }}</span>
+      {% if rx.doctor.phone %}<span>📞 {{ rx.doctor.phone }}</span>{% endif %}
+    </div>
+  </header>
+
+  <!-- Patient -->
+  <div class="rx-patient">
+    <div><span class="label-sm">Patient</span><strong>{{ rx.patient.name }}</strong></div>
+    <div><span class="label-sm">Age / Gender</span><strong>{{ rx.patient.age }} · {{ rx.patient.gender }}</strong></div>
+    <div><span class="label-sm">Date</span><strong>{{ rx.created_at.strftime("%d %b %Y") }}</strong></div>
+    <div><span class="label-sm">Rx No.</span><strong>#{{ "%05d" | format(rx.id) }}</strong></div>
+  </div>
+
+  <div class="rx-diagnosis">
+    <span class="label-sm">Diagnosis</span>
+    <p>{{ rx.diagnosis }}</p>
+  </div>
+
+  <!-- Medicines -->
+  <div class="rx-body">
+    <div class="rx-symbol">℞</div>
+    <ol class="rx-list">
+      {% for item in rx.items %}
+        <li>
+          <strong>{{ item.medicine }}</strong>
+          <span>
+            {{ item.dosage or "" }}{% if item.dosage and item.frequency %} · {% endif %}{{ item.frequency or "" }}
+            {% if item.duration %} · for {{ item.duration }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  {% if rx.notes %}
+    <div class="rx-notes-box">
+      <span class="label-sm">Notes</span>
+      <p>{{ rx.notes }}</p>
+    </div>
+  {% endif %}
+
+  <!-- Signature -->
+  <footer class="rx-foot">
+    <p class="muted">Please follow the dosage instructions. Contact us if symptoms get worse.</p>
+    <div class="rx-signature">
+      <span class="sign-line"></span>
+      <span>{{ rx.doctor.name }}</span>
+    </div>
+  </footer>
+</article>
+{% endblock %}
