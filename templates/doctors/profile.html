@@ -11,7 +11,7 @@
         <tbody>
           {% for a in items %}
             <tr>
-              <td>{{ a.date.strftime("%a, %d %b %Y") }}</td>
+              <td><a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="link-strong">{{ a.date.strftime("%a, %d %b %Y") }}</a></td>
               <td>{{ a.time.strftime("%I:%M %p") }}</td>
               <td>
                 <a href="{{ url_for('patient_view', patient_id=a.patient.id) }}" class="person">

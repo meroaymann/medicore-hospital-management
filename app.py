@@ -9,7 +9,7 @@ from sqlalchemy import or_, func
 
 from models import (
     db, User, Patient, Doctor, Appointment, Bill, Prescription,
-    BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES,
+    BLOOD_TYPES, SPECIALTIES, APPOINTMENT_STATUSES, PAYMENT_METHODS,
 )
 
 load_dotenv()
@@ -54,6 +54,10 @@ def inject_globals():
     """Variables available in every template."""
     return {"app_name": APP_NAME, "today": date.today(), "specialty_icons": SPECIALTY_ICONS}
 
+@app.template_filter("money")
+def money_filter(value):
+    """Format numbers as money: 1250 → '1,250 EGP'."""
+    return f"{value or 0:,.0f} EGP"
 
 def is_safe_next(target):
     """Only allow redirects inside our own site."""
@@ -830,21 +834,165 @@ def api_available_slots():
     message = f"{free} of {len(slots)} slots available." if free else "No free slots on this day. Try another date."
     return jsonify({"slots": slots, "message": message})
 
-# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
-def coming_soon(title, icon, phase):
-    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
-
-
-
-
-
-
+# ================= BILLING =================
+def parse_money(value):
+    """Turn form text into a number, or None if it isn't one."""
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
 
 
 @app.route("/billing")
 @login_required
 def bills_list():
-    return coming_soon("Billing", "💰", 7)
+    status = request.args.get("status", "")
+    q = request.args.get("q", "").strip()
+    method = request.args.get("method", "")
+    page = request.args.get("page", 1, type=int)
+
+    query = Bill.query.join(Patient)
+    if status in ("paid", "partial", "unpaid"):
+        query = query.filter(Bill.status == status)
+    if q:
+        query = query.filter(Patient.name.ilike(f"%{q}%"))
+    if method in PAYMENT_METHODS:
+        query = query.filter(Bill.payment_method == method)
+
+    pager = query.order_by(Bill.created_at.desc()).paginate(page=page, per_page=12, error_out=False)
+
+    # Summary numbers (all bills)
+    billed, collected = db.session.query(
+        func.coalesce(func.sum(Bill.amount), 0),
+        func.coalesce(func.sum(Bill.paid_amount), 0),
+    ).one()
+    summary = {
+        "billed": billed,
+        "collected": collected,
+        "outstanding": billed - collected,
+        "rate": round(collected / billed * 100, 1) if billed else 0,
+    }
+
+    status_counts = dict(db.session.query(Bill.status, func.count(Bill.id)).group_by(Bill.status).all())
+    status_counts["all"] = sum(status_counts.values())
+
+    # Completed appointments that don't have a bill yet
+    unbilled_query = Appointment.query.filter(
+        Appointment.status == "completed",
+        ~Appointment.bill.has(),
+    ).order_by(Appointment.date.desc(), Appointment.time.desc())
+
+    return render_template(
+        "billing/list.html",
+        pager=pager,
+        status=status, q=q, method=method,
+        summary=summary,
+        status_counts=status_counts,
+        unbilled=unbilled_query.limit(5).all(),
+        unbilled_count=unbilled_query.count(),
+        methods=PAYMENT_METHODS,
+    )
+
+
+@app.route("/billing/new", methods=["GET", "POST"])
+@login_required
+def bill_new():
+    appointment_id = request.values.get("appointment_id", type=int)
+    appointment = db.session.get(Appointment, appointment_id) if appointment_id else None
+
+    if not appointment:
+        flash("Choose a completed appointment to bill.", "warning")
+        return redirect(url_for("bills_list"))
+    if appointment.bill:
+        flash("This appointment already has a bill.", "info")
+        return redirect(url_for("bill_view", bill_id=appointment.bill.id))
+    if appointment.status != "completed":
+        flash("Only completed appointments can be billed.", "warning")
+        return redirect(url_for("appointment_view", appointment_id=appointment.id))
+
+    fee = appointment.doctor.consultation_fee
+    form = {"amount": f"{fee:g}", "paid_now": "0", "payment_method": ""}
+
+    if request.method == "POST":
+        form = {key: request.form.get(key, "").strip() for key in ("amount", "paid_now", "payment_method")}
+        amount = parse_money(form["amount"])
+        paid = parse_money(form["paid_now"] or "0")
+
+        errors = []
+        if amount is None or amount <= 0 or amount > 1_000_000:
+            errors.append("Please enter a valid bill amount.")
+        if paid is None or paid < 0:
+            errors.append("Please enter a valid payment amount.")
+        elif amount and paid > amount:
+            errors.append("The payment can't be more than the bill amount.")
+        if paid and paid > 0 and form["payment_method"] not in PAYMENT_METHODS:
+            errors.append("Please choose a payment method.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            bill = Bill(
+                patient_id=appointment.patient_id,
+                appointment_id=appointment.id,
+                amount=amount,
+                paid_amount=paid,
+                payment_method=form["payment_method"] if paid > 0 else None,
+            )
+            bill.update_status()
+            db.session.add(bill)
+            db.session.commit()
+            flash(f"Bill #{bill.id} created for {appointment.patient.name}. 🧾", "success")
+            return redirect(url_for("bill_view", bill_id=bill.id))
+
+    return render_template("billing/form.html", a=appointment, form=form, fee=fee, methods=PAYMENT_METHODS)
+
+
+@app.route("/billing/<int:bill_id>")
+@login_required
+def bill_view(bill_id):
+    bill = db.get_or_404(Bill, bill_id)
+    appointment = bill.appointment
+
+    # Split the total into consultation + extra services for the invoice
+    fee = appointment.doctor.consultation_fee if appointment else bill.amount
+    consultation = min(fee, bill.amount)
+    extras = round(bill.amount - consultation, 2)
+
+    return render_template("billing/invoice.html", b=bill, a=appointment,
+                           consultation=consultation, extras=extras, methods=PAYMENT_METHODS)
+
+
+@app.route("/billing/<int:bill_id>/pay", methods=["POST"])
+@login_required
+def bill_payment(bill_id):
+    bill = db.get_or_404(Bill, bill_id)
+    amount = parse_money(request.form.get("amount"))
+    method = request.form.get("payment_method", "")
+
+    if bill.balance <= 0:
+        flash("This bill is already fully paid.", "info")
+    elif amount is None or amount <= 0:
+        flash("Please enter a valid payment amount.", "error")
+    elif amount > bill.balance + 0.01:
+        flash(f"The payment can't be more than the balance ({bill.balance:,.0f} EGP).", "error")
+    elif method not in PAYMENT_METHODS:
+        flash("Please choose a payment method.", "error")
+    else:
+        bill.paid_amount = round(bill.paid_amount + amount, 2)
+        bill.payment_method = method
+        bill.update_status()
+        db.session.commit()
+        if bill.status == "paid":
+            flash(f"Payment of {amount:,.0f} EGP recorded. The bill is fully paid. 🎉", "success")
+        else:
+            flash(f"Payment of {amount:,.0f} EGP recorded. Remaining: {bill.balance:,.0f} EGP.", "success")
+
+    return redirect(url_for("bill_view", bill_id=bill.id))
+
+# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
+def coming_soon(title, icon, phase):
+    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
 
 
 @app.route("/prescriptions")

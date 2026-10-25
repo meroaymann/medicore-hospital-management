@@ -75,17 +75,21 @@
     </a>
   </section>
 
-  <!-- Bill -->
+    <!-- Bill -->
   <section class="card">
     <div class="section-head"><h3>💰 Bill</h3>{% if a.bill %}{{ status_badge(a.bill.status) }}{% endif %}</div>
     {% if a.bill %}
       <div class="money-row">
-        <div><span>Amount</span><strong>{{ "{:,.0f}".format(a.bill.amount) }} EGP</strong></div>
-        <div><span>Paid</span><strong>{{ "{:,.0f}".format(a.bill.paid_amount) }} EGP</strong></div>
-        <div><span>Balance</span><strong class="{% if a.bill.balance > 0 %}text-danger{% endif %}">{{ "{:,.0f}".format(a.bill.balance) }} EGP</strong></div>
+        <div><span>Amount</span><strong>{{ a.bill.amount | money }}</strong></div>
+        <div><span>Paid</span><strong>{{ a.bill.paid_amount | money }}</strong></div>
+        <div><span>Balance</span><strong class="{% if a.bill.balance > 0 %}text-danger{% endif %}">{{ a.bill.balance | money }}</strong></div>
       </div>
+      <a href="{{ url_for('bill_view', bill_id=a.bill.id) }}" class="btn btn-outline btn-sm card-link">🧾 View invoice</a>
+    {% elif a.status == "completed" %}
+      <p class="muted">This visit is completed but hasn't been billed yet.</p>
+      <a href="{{ url_for('bill_new', appointment_id=a.id) }}" class="btn btn-primary btn-sm card-link">+ Create bill</a>
     {% else %}
-      <p class="muted">No bill yet. Creating bills comes in Phase 7. 💳</p>
+      <p class="muted">A bill can be created once the appointment is completed.</p>
     {% endif %}
   </section>
 

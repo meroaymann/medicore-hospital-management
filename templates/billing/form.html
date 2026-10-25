@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Create bill{% endblock %}
+{% block page_title %}Create bill{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="back-link">← Back to appointment</a>
+    <h2>Create a bill</h2>
+    <p class="muted">For appointment #{{ a.id }} on {{ a.date.strftime("%d %b %Y") }}</p>
+  </div>
+</div>
+
+<div class="bill-form-layout">
+  <form method="post" class="card form-card">
+    <input type="hidden" name="appointment_id" value="{{ a.id }}">
+
+    <div class="form-grid">
+      <div class="field span-2">
+        <label for="amount">Total amount (EGP) *</label>
+        <input id="amount" type="number" name="amount" min="1" step="0.01" value="{{ form.amount }}" required>
+        <span class="field-hint">Consultation fee is {{ fee | money }}. Add any extra charges (lab tests, procedures...).</span>
+      </div>
+
+      <div class="field">
+        <label for="paid_now">Paid now (EGP)</label>
+        <input id="paid_now" type="number" name="paid_now" min="0" step="0.01" value="{{ form.paid_now }}">
+        <div class="quick-pay">
+          <button type="button" class="btn btn-outline btn-sm" data-pay="none">Nothing yet</button>
+          <button type="button" class="btn btn-outline btn-sm" data-pay="full">Paid in full</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="payment_method">Payment method</label>
+        <select id="payment_method" name="payment_method">
+          <option value="">Choose...</option>
+          {% for m in methods %}
+            <option value="{{ m }}" {% if form.payment_method == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+        <span class="field-hint">Required if something was paid.</span>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn btn-primary">Create bill</button>
+    </div>
+  </form>
+
+  <!-- Summary -->
+  <aside class="card">
+    <div class="section-head"><h3>📋 Visit summary</h3></div>
+    <dl class="info-list">
+      <div><dt>Patient</dt><dd>{{ a.patient.name }}</dd></div>
+      <div><dt>Doctor</dt><dd>{{ a.doctor.name }} · {{ a.doctor.specialty }}</dd></div>
+      <div><dt>Date</dt><dd>{{ a.date.strftime("%A, %d %b %Y") }} · {{ a.time.strftime("%I:%M %p") }}</dd></div>
+      <div><dt>Reason</dt><dd>{{ a.reason or "–" }}</dd></div>
+      <div><dt>Consultation fee</dt><dd>{{ fee | money }}</dd></div>
+    </dl>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Quick buttons: "Nothing yet" / "Paid in full"
+  const amountInput = document.getElementById("amount");
+  const paidInput = document.getElementById("paid_now");
+  const methodSelect = document.getElementById("payment_method");
+
+  document.querySelectorAll("[data-pay]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      paidInput.value = btn.dataset.pay === "full" ? amountInput.value : 0;
+      if (btn.dataset.pay === "full" && !methodSelect.value) methodSelect.value = "Cash";
+    });
+  });
+</script>
+{% endblock %}

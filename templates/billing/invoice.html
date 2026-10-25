@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}Invoice #{{ b.id }}{% endblock %}
+{% block page_title %}Invoice{% endblock %}
+
+{% block content %}
+<div class="page-header no-print">
+  <div>
+    <a href="{{ url_for('bills_list') }}" class="back-link">← All bills</a>
+    <h2>Invoice #INV-{{ "%05d" | format(b.id) }}</h2>
+    <p class="muted">{{ b.patient.name }} · {{ b.created_at.strftime("%d %b %Y") }}</p>
+  </div>
+  <div class="header-actions">
+    {% if a %}<a href="{{ url_for('appointment_view', appointment_id=a.id) }}" class="btn btn-outline">📅 Appointment</a>{% endif %}
+    <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Print invoice</button>
+  </div>
+</div>
+
+<div class="invoice-layout">
+  <!-- The invoice itself -->
+  <article class="card invoice">
+    <header class="invoice-head">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+            <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+          </svg>
+        </div>
+        <div>
+          <span>{{ app_name }}</span>
+          <small class="muted">Hospital Management · Cairo, Egypt</small>
+        </div>
+      </div>
+      <div class="invoice-meta">
+        <h3>INVOICE</h3>
+        <p>#INV-{{ "%05d" | format(b.id) }}</p>
+        <p class="muted">Issued {{ b.created_at.strftime("%d %b %Y") }}</p>
+        {{ status_badge(b.status) }}
+      </div>
+    </header>
+
+    <div class="invoice-parties">
+      <div>
+        <span class="label-sm">Billed to</span>
+        <strong>{{ b.patient.name }}</strong>
+        <span>{{ b.patient.phone }}</span>
+        {% if b.patient.email %}<span>{{ b.patient.email }}</span>{% endif %}
+        {% if b.patient.address %}<span>{{ b.patient.address }}</span>{% endif %}
+      </div>
+      <div>
+        <span class="label-sm">Treated by</span>
+        {% if a %}
+          <strong>{{ a.doctor.name }}</strong>
+          <span>{{ a.doctor.specialty }}</span>
+          <span>Visit: {{ a.date.strftime("%d %b %Y") }} · {{ a.time.strftime("%I:%M %p") }}</span>
+        {% else %}
+          <span>–</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <table class="table invoice-table">
+      <thead><tr><th>Description</th><th class="text-right">Amount</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>Consultation{% if a %} · {{ a.doctor.specialty }}{% endif %}</strong>
+            {% if a and a.reason %}<span class="person-sub">{{ a.reason }}</span>{% endif %}
+          </td>
+          <td class="text-right">{{ consultation | money }}</td>
+        </tr>
+        {% if extras > 0 %}
+          <tr>
+            <td><strong>Additional services</strong><span class="person-sub">Tests, procedures and other charges</span></td>
+            <td class="text-right">{{ extras | money }}</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    <div class="invoice-totals">
+      <div><span>Total</span><strong>{{ b.amount | money }}</strong></div>
+      <div><span>Paid{% if b.payment_method %} ({{ b.payment_method }}){% endif %}</span><strong class="text-success">− {{ b.paid_amount | money }}</strong></div>
+      <div class="grand"><span>Balance due</span><strong class="{% if b.balance > 0 %}text-danger{% endif %}">{{ b.balance | money }}</strong></div>
+    </div>
+
+    <p class="invoice-foot">Thank you for choosing {{ app_name }}. Wishing you good health! 💙</p>
+  </article>
+
+  <!-- Payment panel (not printed) -->
+  <aside class="no-print">
+    {% if b.balance > 0 %}
+      <form id="pay" method="post" action="{{ url_for('bill_payment', bill_id=b.id) }}" class="card form">
+        <div class="section-head"><h3>💳 Record a payment</h3></div>
+        <div class="field">
+          <label for="amount">Amount (EGP)</label>
+          <input id="amount" type="number" name="amount" min="1" max="{{ b.balance }}" step="0.01" value="{{ '%g' | format(b.balance) }}" required>
+          <span class="field-hint">Balance: {{ b.balance | money }}</span>
+        </div>
+        <div class="field">
+          <label for="payment_method">Method</label>
+          <select id="payment_method" name="payment_method" required>
+            {% for m in methods %}
+              <option value="{{ m }}" {% if b.payment_method == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Record payment</button>
+      </form>
+    {% else %}
+      <div class="card paid-card">
+        <div class="big-icon">✅</div>
+        <h3>Fully paid</h3>
+        <p class="muted">No balance left on this bill.</p>
+      </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

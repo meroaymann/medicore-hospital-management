@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination, status_badge with context %}
+{% block title %}Billing{% endblock %}
+{% block page_title %}Billing{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Billing & payments</h2>
+    <p class="muted">Track bills, payments and outstanding balances.</p>
+  </div>
+</div>
+
+<!-- Summary -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">Total billed</div>
+      <div class="stat-value">{{ summary.billed | money }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">Collected</div>
+      <div class="stat-value text-success">{{ summary.collected | money }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">Outstanding</div>
+      <div class="stat-value text-danger">{{ summary.outstanding | money }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📈</div>
+    <div class="grow">
+      <div class="stat-label">Collection rate</div>
+      <div class="stat-value">{{ summary.rate }}%</div>
+      <progress class="progress-bar" value="{{ summary.rate }}" max="100">{{ summary.rate }}%</progress>
+    </div>
+  </div>
+</div>
+
+<!-- Ready to bill -->
+{% if unbilled %}
+  <section class="card ready-card">
+    <div class="section-head">
+      <h3>⏳ Ready to bill</h3>
+      <span class="muted">{{ unbilled_count }} completed appointment{{ "" if unbilled_count == 1 else "s" }} without a bill</span>
+    </div>
+    <div class="ready-list">
+      {% for a in unbilled %}
+        <div class="ready-item">
+          <div>
+            <span class="person-name">{{ a.patient.name }}</span>
+            <span class="person-sub">{{ a.doctor.name }} · {{ a.date.strftime("%d %b") }} · {{ a.doctor.consultation_fee | money }}</span>
+          </div>
+          <a href="{{ url_for('bill_new', appointment_id=a.id) }}" class="btn btn-primary btn-sm">Create bill</a>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+<!-- Tabs -->
+<div class="tabs">
+  {% for key, label in [("", "All"), ("unpaid", "Unpaid"), ("partial", "Partial"), ("paid", "Paid")] %}
+    <a href="{{ url_for('bills_list', status=key or None, q=q or None, method=method or None) }}"
+       class="tab {% if status == key %}active{% endif %}">
+      {{ label }} <span class="tab-count">{{ status_counts.get(key or "all", 0) }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+<!-- Filters -->
+<form method="get" class="card toolbar">
+  <input type="hidden" name="status" value="{{ status }}">
+  <div class="field grow">
+    <label for="q">Patient</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Patient name">
+  </div>
+  <div class="field">
+    <label for="method">Payment method</label>
+    <select id="method" name="method">
+      <option value="">All methods</option>
+      {% for m in methods %}
+        <option value="{{ m }}" {% if method == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="toolbar-actions">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    {% if q or method %}
+      <a href="{{ url_for('bills_list', status=status or None) }}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Table -->
+<div class="card table-card">
+  {% if pager.items %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bill</th>
+            <th>Patient</th>
+            <th>Doctor</th>
+            <th>Amount</th>
+            <th>Paid</th>
+            <th>Balance</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in pager.items %}
+            <tr>
+              <td>
+                <a href="{{ url_for('bill_view', bill_id=b.id) }}" class="link-strong">#{{ b.id }}</a>
+                <span class="person-sub">{{ b.created_at.strftime("%d %b %Y") }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('patient_view', patient_id=b.patient.id) }}" class="person">
+                  <span class="avatar sm">{{ b.patient.name[0] | upper }}</span>
+                  <span class="person-name">{{ b.patient.name }}</span>
+                </a>
+              </td>
+              <td>{{ b.appointment.doctor.name if b.appointment else "–" }}</td>
+              <td>{{ b.amount | money }}</td>
+              <td>{{ b.paid_amount | money }}</td>
+              <td class="{% if b.balance > 0 %}text-danger{% endif %}">{{ b.balance | money }}</td>
+              <td>{{ status_badge(b.status) }}</td>
+              <td class="text-right">
+                <div class="row-actions">
+                  <a href="{{ url_for('bill_view', bill_id=b.id) }}" class="btn btn-outline btn-sm">Invoice</a>
+                  {% if b.balance > 0 %}
+                    <a href="{{ url_for('bill_view', bill_id=b.id) }}#pay" class="btn btn-success-soft btn-sm">💳 Pay</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pagination(pager, "bills_list") }}
+  {% else %}
+    <div class="empty-state">
+      <div class="big-icon">🧾</div>
+      <h3>No bills found</h3>
+      <p class="muted">Try another tab or filter.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
