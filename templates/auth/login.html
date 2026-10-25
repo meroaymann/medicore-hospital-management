@@ -1,0 +1,39 @@
+{% extends "auth/auth_base.html" %}
+{% block title %}Log in{% endblock %}
+
+{% block content %}
+<h2>Welcome back 👋</h2>
+<p class="auth-sub">Log in to your staff account.</p>
+
+<form method="post" class="form">
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" type="email" name="email" value="{{ email }}"
+           placeholder="you@hospital.com" autocomplete="email" required>
+  </div>
+
+  <div class="field">
+    <label for="password">Password</label>
+    <div class="password-field">
+      <input id="password" type="password" name="password"
+             placeholder="••••••••" autocomplete="current-password" required>
+      <button type="button" class="toggle-password" aria-label="Show password">👁</button>
+    </div>
+  </div>
+
+  <label class="checkbox">
+    <input type="checkbox" name="remember"> Remember me
+  </label>
+
+  <button type="submit" class="btn btn-primary btn-block">Log in</button>
+</form>
+
+<div class="demo-box">
+  <strong>🔑 Demo account</strong>
+  <span>admin@demo.com · admin1234</span>
+</div>
+
+<p class="auth-switch">
+  New staff member? <a href="{{ url_for('signup') }}">Create an account</a>
+</p>
+{% endblock %}

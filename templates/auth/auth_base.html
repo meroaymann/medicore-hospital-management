@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% endblock %} · {{ app_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <!-- Apply dark mode before the page shows -->
+  <script>
+    try {
+      const t = localStorage.getItem("theme");
+      const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="auth-layout">
+
+    <!-- Left: brand panel (hidden on mobile) -->
+    <aside class="auth-brand-panel">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+            <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+          </svg>
+        </div>
+        <span>{{ app_name }}</span>
+      </div>
+
+      <div class="auth-hero">
+        <h1>Hospital management, made simple.</h1>
+        <p>Manage patients, doctors, appointments, billing, and prescriptions, all in one place.</p>
+        <ul class="auth-features">
+          <li>👥 Patient records & history</li>
+          <li>📅 Appointment booking</li>
+          <li>💰 Billing & payments</li>
+          <li>📊 Live dashboard & insights</li>
+        </ul>
+      </div>
+
+      <p class="auth-footer-note">© {{ today.year }} {{ app_name }}</p>
+    </aside>
+
+    <!-- Right: the form -->
+    <main class="auth-main">
+      <button id="themeToggle" class="icon-btn theme-float" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+
+      <div class="auth-card">
+        <!-- Brand shown on mobile only -->
+        <div class="brand auth-mobile-brand">
+          <div class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+              <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+            </svg>
+          </div>
+          <span>{{ app_name }}</span>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack">
+              {% for category, message in messages %}
+                <div class="flash flash-{{ category }}" role="alert">
+                  <span>{{ message }}</span>
+                  <button type="button" class="flash-close" aria-label="Dismiss">&times;</button>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
