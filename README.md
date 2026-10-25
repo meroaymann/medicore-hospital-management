@@ -27,14 +27,17 @@ A full-stack **Hospital Management System** built with **Flask** and **SQLite** 
 |---|---|
 | ![Doctors](screenshots/doctors.png) | ![Booking](screenshots/booking.png) |
 
-| Billing | Printable invoice |
+| Billing | Global search |
 |---|---|
-| ![Billing](screenshots/billing.png) | ![Invoice](screenshots/invoice.png) | | ![Invoice1](screenshots/invoice1.png) |
+| ![Billing](screenshots/billing.png) | ![Search](screenshots/search.png) |
 
-
-| Prescription (℞) | Global search |
+| Invoice | Invoice (printed) |
 |---|---|
-| ![Prescription](screenshots/prescription.png) | ![Prescription1](screenshots/prescription1.png) | ![Search](screenshots/search.png) |
+| ![Invoice](screenshots/invoice.png) | ![Invoice print](screenshots/invoice1.png) |
+
+| Prescription (℞) | Prescription (printed) |
+|---|---|
+| ![Prescription](screenshots/prescription.png) | ![Prescription print](screenshots/prescription1.png) |
 
 | Mobile |
 |---|
