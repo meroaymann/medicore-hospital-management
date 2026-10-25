@@ -1,0 +1,48 @@
+{# ---------- Pagination ---------- #}
+{% macro pagination(pager, endpoint) -%}
+  {% if pager.pages > 1 %}
+    {% set args = request.args.to_dict() %}
+    <div class="pagination-bar">
+      <p class="page-info">Showing {{ pager.first }}–{{ pager.last }} of {{ pager.total }}</p>
+      <nav class="pagination" aria-label="Pagination">
+        {% if pager.has_prev %}
+          {% set _ = args.update({"page": pager.prev_num}) %}
+          <a class="page-link" href="{{ url_for(endpoint, **args) }}">‹ Prev</a>
+        {% else %}
+          <span class="page-link disabled">‹ Prev</span>
+        {% endif %}
+
+        {% for p in pager.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+          {% if p %}
+            {% if p == pager.page %}
+              <span class="page-link active">{{ p }}</span>
+            {% else %}
+              {% set _ = args.update({"page": p}) %}
+              <a class="page-link" href="{{ url_for(endpoint, **args) }}">{{ p }}</a>
+            {% endif %}
+          {% else %}
+            <span class="page-link dots">…</span>
+          {% endif %}
+        {% endfor %}
+
+        {% if pager.has_next %}
+          {% set _ = args.update({"page": pager.next_num}) %}
+          <a class="page-link" href="{{ url_for(endpoint, **args) }}">Next ›</a>
+        {% else %}
+          <span class="page-link disabled">Next ›</span>
+        {% endif %}
+      </nav>
+    </div>
+  {% endif %}
+{%- endmacro %}
+
+
+{# ---------- Status badges ---------- #}
+{% macro status_badge(status) -%}
+  {% set labels = {
+    "scheduled": "Scheduled", "completed": "Completed", "cancelled": "Cancelled", "no_show": "No-show",
+    "paid": "Paid", "partial": "Partial", "unpaid": "Unpaid",
+    "active": "Active", "off": "Off"
+  } %}
+  <span class="badge badge-{{ status }}">{{ labels.get(status, status | capitalize) }}</span>
+{%- endmacro %}

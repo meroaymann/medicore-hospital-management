@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+{% block title %}{{ patient.name }}{% endblock %}
+{% block page_title %}Patient profile{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('patients_list') }}" class="back-link">← All patients</a>
+    <h2>{{ patient.name }}</h2>
+    <p class="muted">Patient #{{ patient.id }} · Registered {{ patient.created_at.strftime("%d %b %Y") }}</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('patient_edit', patient_id=patient.id) }}" class="btn btn-outline">✏️ Edit</a>
+    <form method="post" action="{{ url_for('patient_delete', patient_id=patient.id) }}"
+          onsubmit="return confirm('Delete {{ patient.name }}? This also deletes their appointments, bills and prescriptions.');">
+      <button type="submit" class="btn btn-danger">🗑️ Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="profile-grid">
+  <!-- Left: personal info -->
+  <aside class="card profile-card">
+    <div class="profile-top">
+      <div class="avatar lg">{{ patient.name[0] | upper }}</div>
+      <h3>{{ patient.name }}</h3>
+      <p class="muted">{{ patient.gender }} · {{ patient.age }} years</p>
+      {% if patient.blood_type %}<span class="badge badge-blood">🩸 {{ patient.blood_type }}</span>{% endif %}
+    </div>
+    <dl class="info-list">
+      <div><dt>📞 Phone</dt><dd>{{ patient.phone }}</dd></div>
+      <div><dt>✉️ Email</dt><dd>{{ patient.email or "–" }}</dd></div>
+      <div><dt>🎂 Date of birth</dt><dd>{{ patient.date_of_birth.strftime("%d %b %Y") }}</dd></div>
+      <div><dt>📍 Address</dt><dd>{{ patient.address or "–" }}</dd></div>
+    </dl>
+  </aside>
+
+  <!-- Right: stats + history -->
+  <div class="profile-main">
+    <div class="stats-grid mini">
+      <div class="stat-card"><div class="stat-icon">✅</div><div><div class="stat-label">Visits</div><div class="stat-value">{{ stats.visits }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">📅</div><div><div class="stat-label">Upcoming</div><div class="stat-value">{{ stats.upcoming }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">🧾</div><div><div class="stat-label">Total billed</div><div class="stat-value">{{ "{:,.0f}".format(stats.billed) }}</div></div></div>
+      <div class="stat-card"><div class="stat-icon">⚠️</div><div><div class="stat-label">Balance due</div><div class="stat-value {% if stats.balance > 0 %}text-danger{% endif %}">{{ "{:,.0f}".format(stats.balance) }}</div></div></div>
+    </div>
+
+    <!-- Appointments -->
+    <section class="card table-card">
+      <div class="section-head"><h3>📅 Appointments</h3><span class="muted">{{ appointments | length }}</span></div>
+      {% if appointments %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Date</th><th>Time</th><th>Doctor</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for a in appointments %}
+                <tr>
+                  <td>{{ a.date.strftime("%d %b %Y") }}</td>
+                  <td>{{ a.time.strftime("%I:%M %p") }}</td>
+                  <td>
+                    <span class="person-name">{{ a.doctor.name }}</span>
+                    <span class="person-sub">{{ a.doctor.specialty }}</span>
+                  </td>
+                  <td>{{ a.reason or "–" }}</td>
+                  <td>{{ status_badge(a.status) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-inline">No appointments yet.</p>
+      {% endif %}
+    </section>
+
+    <!-- Bills -->
+    <section class="card table-card">
+      <div class="section-head"><h3>💰 Bills</h3><span class="muted">{{ bills | length }}</span></div>
+      {% if bills %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Bill #</th><th>Date</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for b in bills %}
+                <tr>
+                  <td>#{{ b.id }}</td>
+                  <td>{{ b.created_at.strftime("%d %b %Y") }}</td>
+                  <td>{{ "{:,.0f}".format(b.amount) }} EGP</td>
+                  <td>{{ "{:,.0f}".format(b.paid_amount) }} EGP</td>
+                  <td class="{% if b.balance > 0 %}text-danger{% endif %}">{{ "{:,.0f}".format(b.balance) }} EGP</td>
+                  <td>{{ status_badge(b.status) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-inline">No bills yet.</p>
+      {% endif %}
+    </section>
+
+    <!-- Prescriptions -->
+    <section class="card">
+      <div class="section-head"><h3>💊 Prescriptions</h3><span class="muted">{{ prescriptions | length }}</span></div>
+      {% if prescriptions %}
+        <div class="rx-list">
+          {% for rx in prescriptions %}
+            <div class="rx-item">
+              <div class="rx-head">
+                <strong>{{ rx.diagnosis }}</strong>
+                <span class="muted">{{ rx.created_at.strftime("%d %b %Y") }} · {{ rx.doctor.name }}</span>
+              </div>
+              <ul class="rx-meds">
+                {% for item in rx.items %}
+                  <li><strong>{{ item.medicine }}</strong> · {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }}</li>
+                {% endfor %}
+              </ul>
+              {% if rx.notes %}<p class="muted rx-notes">📝 {{ rx.notes }}</p>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-inline">No prescriptions yet.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

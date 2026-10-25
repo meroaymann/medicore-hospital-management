@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "macros.html" import pagination with context %}
+{% block title %}Patients{% endblock %}
+{% block page_title %}Patients{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Patients</h2>
+    <p class="muted">{{ pager.total }} patient{{ "" if pager.total == 1 else "s" }} found</p>
+  </div>
+  <a href="{{ url_for('patient_new') }}" class="btn btn-primary">+ Register patient</a>
+</div>
+
+<!-- Filters -->
+<form method="get" class="card toolbar">
+  <div class="field grow">
+    <label for="q">Search</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="Name, phone or email">
+  </div>
+  <div class="field">
+    <label for="gender">Gender</label>
+    <select id="gender" name="gender">
+      <option value="">All</option>
+      <option value="Male" {% if gender == "Male" %}selected{% endif %}>Male</option>
+      <option value="Female" {% if gender == "Female" %}selected{% endif %}>Female</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="sort">Sort by</label>
+    <select id="sort" name="sort">
+      <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest first</option>
+      <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest first</option>
+      <option value="name" {% if sort == "name" %}selected{% endif %}>Name (A–Z)</option>
+    </select>
+  </div>
+  <div class="toolbar-actions">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    {% if q or gender or sort != "newest" %}
+      <a href="{{ url_for('patients_list') }}" class="btn btn-outline">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Table -->
+<div class="card table-card">
+  {% if pager.items %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Patient</th>
+            <th>Gender</th>
+            <th>Age</th>
+            <th>Phone</th>
+            <th>Blood</th>
+            <th>Registered</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in pager.items %}
+            <tr>
+              <td>
+                <a href="{{ url_for('patient_view', patient_id=p.id) }}" class="person">
+                  <span class="avatar sm">{{ p.name[0] | upper }}</span>
+                  <span>
+                    <span class="person-name">{{ p.name }}</span>
+                    <span class="person-sub">{{ p.email or "No email" }}</span>
+                  </span>
+                </a>
+              </td>
+              <td>{{ p.gender }}</td>
+              <td>{{ p.age }}</td>
+              <td>{{ p.phone }}</td>
+              <td>
+                {% if p.blood_type %}<span class="badge badge-blood">{{ p.blood_type }}</span>{% else %}–{% endif %}
+              </td>
+              <td>{{ p.created_at.strftime("%d %b %Y") }}</td>
+              <td class="text-right">
+                <div class="row-actions">
+                  <a href="{{ url_for('patient_view', patient_id=p.id) }}" class="btn btn-outline btn-sm">View</a>
+                  <a href="{{ url_for('patient_edit', patient_id=p.id) }}" class="btn btn-outline btn-sm">Edit</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pagination(pager, "patients_list") }}
+  {% else %}
+    <div class="empty-state">
+      <div class="big-icon">🔍</div>
+      <h3>No patients found</h3>
+      <p class="muted">Try a different search, or register a new patient.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,12 +1,13 @@
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
+from sqlalchemy import or_
 
-from models import db, User, Patient, Doctor, Appointment, Bill, Prescription
+from models import db, User, Patient, Doctor, Appointment, Bill, Prescription, BLOOD_TYPES
 
 load_dotenv()
 
@@ -35,6 +36,7 @@ with app.app_context():
     db.create_all()
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PHONE_RE = re.compile(r"^\+?[0-9\s-]{7,20}$")
 
 
 @app.context_processor
@@ -137,15 +139,178 @@ def dashboard():
     }
     return render_template("dashboard.html", counts=counts)
 
-# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
-def coming_soon(title, icon, phase):
-    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
+# ================= PATIENTS =================
+PATIENT_FIELDS = ["name", "gender", "date_of_birth", "phone", "email", "address", "blood_type"]
+
+
+def read_patient_form(form):
+    """Read and check the patient form. Returns (data, date_of_birth, errors)."""
+    data = {field: form.get(field, "").strip() for field in PATIENT_FIELDS}
+    errors = []
+    dob = None
+
+    if not data["name"]:
+        errors.append("Name is required.")
+    elif len(data["name"]) > 100:
+        errors.append("Name is too long.")
+
+    if data["gender"] not in ("Male", "Female"):
+        errors.append("Please choose a gender.")
+
+    try:
+        dob = datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date()
+        if dob > date.today():
+            errors.append("Date of birth can't be in the future.")
+        elif dob.year < 1900:
+            errors.append("Please enter a valid date of birth.")
+    except ValueError:
+        errors.append("Please enter a valid date of birth.")
+
+    if not PHONE_RE.match(data["phone"]):
+        errors.append("Please enter a valid phone number.")
+
+    if data["email"] and not EMAIL_RE.match(data["email"]):
+        errors.append("Please enter a valid email.")
+
+    if data["blood_type"] and data["blood_type"] not in BLOOD_TYPES:
+        errors.append("Please choose a valid blood type.")
+
+    return data, dob, errors
 
 
 @app.route("/patients")
 @login_required
 def patients_list():
-    return coming_soon("Patients", "👥", 4)
+    q = request.args.get("q", "").strip()
+    gender = request.args.get("gender", "")
+    sort = request.args.get("sort", "newest")
+    page = request.args.get("page", 1, type=int)
+
+    query = Patient.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(
+            Patient.name.ilike(like),
+            Patient.phone.ilike(like),
+            Patient.email.ilike(like),
+        ))
+    if gender in ("Male", "Female"):
+        query = query.filter(Patient.gender == gender)
+
+    if sort == "name":
+        query = query.order_by(Patient.name.asc())
+    elif sort == "oldest":
+        query = query.order_by(Patient.created_at.asc())
+    else:
+        query = query.order_by(Patient.created_at.desc())
+
+    pager = query.paginate(page=page, per_page=10, error_out=False)
+    return render_template("patients/list.html", pager=pager, q=q, gender=gender, sort=sort)
+
+
+@app.route("/patients/new", methods=["GET", "POST"])
+@login_required
+def patient_new():
+    form = {}
+    if request.method == "POST":
+        form, dob, errors = read_patient_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            patient = Patient(
+                name=form["name"],
+                gender=form["gender"],
+                date_of_birth=dob,
+                phone=form["phone"],
+                email=form["email"] or None,
+                address=form["address"] or None,
+                blood_type=form["blood_type"] or None,
+            )
+            db.session.add(patient)
+            db.session.commit()
+            flash(f"{patient.name} was registered successfully. ✅", "success")
+            return redirect(url_for("patient_view", patient_id=patient.id))
+
+    return render_template("patients/form.html", form=form, patient=None, blood_types=BLOOD_TYPES)
+
+
+@app.route("/patients/<int:patient_id>")
+@login_required
+def patient_view(patient_id):
+    patient = db.get_or_404(Patient, patient_id)
+
+    appointments = sorted(patient.appointments, key=lambda a: (a.date, a.time), reverse=True)
+    bills = sorted(patient.bills, key=lambda b: b.created_at, reverse=True)
+    prescriptions = sorted(patient.prescriptions, key=lambda p: p.created_at, reverse=True)
+
+    stats = {
+        "visits": sum(1 for a in appointments if a.status == "completed"),
+        "upcoming": sum(1 for a in appointments if a.status == "scheduled" and a.date >= date.today()),
+        "billed": sum(b.amount for b in bills),
+        "balance": sum(b.balance for b in bills),
+    }
+
+    return render_template(
+        "patients/profile.html",
+        patient=patient,
+        appointments=appointments,
+        bills=bills,
+        prescriptions=prescriptions,
+        stats=stats,
+    )
+
+
+@app.route("/patients/<int:patient_id>/edit", methods=["GET", "POST"])
+@login_required
+def patient_edit(patient_id):
+    patient = db.get_or_404(Patient, patient_id)
+
+    if request.method == "POST":
+        form, dob, errors = read_patient_form(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            patient.name = form["name"]
+            patient.gender = form["gender"]
+            patient.date_of_birth = dob
+            patient.phone = form["phone"]
+            patient.email = form["email"] or None
+            patient.address = form["address"] or None
+            patient.blood_type = form["blood_type"] or None
+            db.session.commit()
+            flash("Patient details updated. ✅", "success")
+            return redirect(url_for("patient_view", patient_id=patient.id))
+    else:
+        # Fill the form with the current details
+        form = {
+            "name": patient.name,
+            "gender": patient.gender,
+            "date_of_birth": patient.date_of_birth.isoformat(),
+            "phone": patient.phone,
+            "email": patient.email or "",
+            "address": patient.address or "",
+            "blood_type": patient.blood_type or "",
+        }
+
+    return render_template("patients/form.html", form=form, patient=patient, blood_types=BLOOD_TYPES)
+
+
+@app.route("/patients/<int:patient_id>/delete", methods=["POST"])
+@login_required
+def patient_delete(patient_id):
+    patient = db.get_or_404(Patient, patient_id)
+    name = patient.name
+    db.session.delete(patient)  # also deletes their appointments, bills and prescriptions
+    db.session.commit()
+    flash(f"{name} was deleted.", "info")
+    return redirect(url_for("patients_list"))
+
+# ================= PLACEHOLDER PAGES (replaced in the next phases) =================
+def coming_soon(title, icon, phase):
+    return render_template("coming_soon.html", title=title, icon=icon, phase=phase)
+
 
 
 @app.route("/doctors")

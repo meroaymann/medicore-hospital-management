@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set editing = patient is not none %}
+{% block title %}{{ "Edit patient" if editing else "Register patient" }}{% endblock %}
+{% block page_title %}{{ "Edit patient" if editing else "Register patient" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('patient_view', patient_id=patient.id) if editing else url_for('patients_list') }}" class="back-link">← Back</a>
+    <h2>{{ "Edit " ~ patient.name if editing else "Register a new patient" }}</h2>
+    <p class="muted">Fields marked with * are required.</p>
+  </div>
+</div>
+
+<form method="post" class="card form-card">
+  <div class="form-grid">
+    <div class="field span-2">
+      <label for="name">Full name *</label>
+      <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required>
+    </div>
+
+    <div class="field">
+      <label for="gender">Gender *</label>
+      <select id="gender" name="gender" required>
+        <option value="">Choose...</option>
+        <option value="Male" {% if form.get('gender') == "Male" %}selected{% endif %}>Male</option>
+        <option value="Female" {% if form.get('gender') == "Female" %}selected{% endif %}>Female</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="date_of_birth">Date of birth *</label>
+      <input id="date_of_birth" type="date" name="date_of_birth"
+             value="{{ form.get('date_of_birth', '') }}" max="{{ today.isoformat() }}" required>
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone *</label>
+      <input id="phone" type="tel" name="phone" value="{{ form.get('phone', '') }}"
+             placeholder="01012345678" required>
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" value="{{ form.get('email', '') }}"
+             placeholder="patient@example.com">
+    </div>
+
+    <div class="field">
+      <label for="blood_type">Blood type</label>
+      <select id="blood_type" name="blood_type">
+        <option value="">Unknown</option>
+        {% for bt in blood_types %}
+          <option value="{{ bt }}" {% if form.get('blood_type') == bt %}selected{% endif %}>{{ bt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field span-2">
+      <label for="address">Address</label>
+      <input id="address" name="address" value="{{ form.get('address', '') }}"
+             placeholder="Street, area, city">
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{{ url_for('patient_view', patient_id=patient.id) if editing else url_for('patients_list') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{ "Save changes" if editing else "Register patient" }}</button>
+  </div>
+</form>
+{% endblock %}
