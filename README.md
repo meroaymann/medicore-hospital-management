@@ -33,7 +33,7 @@ A full-stack **Hospital Management System** built with **Flask** and **SQLite** 
 
 | Invoice | Invoice (printed) |
 |---|---|
-| ![Invoice](screenshots/invoice.png) | ![Invoice print](screenshots/invoice1.png) |
+| ![Invoice](screenshots/invoice1.png) | ![Invoice print](screenshots/invoice.png) |
 
 | Prescription (℞) | Prescription (printed) |
 |---|---|
